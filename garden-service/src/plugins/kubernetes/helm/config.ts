@@ -156,6 +156,13 @@ const parameterValueSchema = joi.alternatives(
   joi.object().pattern(/.+/, joi.lazy(() => parameterValueSchema)),
 )
 
+export const helmModuleOutputsSchema = joi.object()
+  .keys({
+    "release-name": joi.string()
+      .required()
+      .description("The Helm release name of the service."),
+  })
+
 export const helmModuleSpecSchema = joi.object().keys({
   base: joiUserIdentifier()
     .description(
