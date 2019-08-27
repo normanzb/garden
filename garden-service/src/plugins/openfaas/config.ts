@@ -74,6 +74,7 @@ export const configSchema = providerConfigBaseSchema
     name: joiProviderName("openfaas"),
     hostname: joi.string()
       .hostname()
+      .allow(null)
       .description(dedent`
         The hostname to configure for the function gateway.
         Defaults to the default hostname of the configured Kubernetes provider.

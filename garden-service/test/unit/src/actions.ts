@@ -5,6 +5,8 @@ import {
   moduleActionDescriptions,
   pluginActionDescriptions,
   createGardenPlugin,
+  ActionHandler,
+  GardenPlugin,
 } from "../../../src/types/plugin/plugin"
 import { Service, ServiceState } from "../../../src/types/service"
 import { RuntimeContext, prepareRuntimeContext } from "../../../src/runtime-context"
@@ -19,6 +21,9 @@ import { Task } from "../../../src/types/task"
 import { expect } from "chai"
 import { omit } from "lodash"
 import { validate, joi } from "../../../src/config/common"
+import { ProjectConfig } from "../../../src/config/project"
+import { DEFAULT_API_VERSION } from "../../../src/constants"
+import { defaultProvider } from "../../../src/config/provider"
 
 const now = new Date()
 
@@ -384,8 +389,8 @@ describe("ActionHelper", () => {
       const pluginName = "test-plugin-b"
       const handler = await actionsA.getActionHandler({ actionType: "prepareEnvironment", pluginName })
 
-      expect(handler["actionType"]).to.equal("prepareEnvironment")
-      expect(handler["pluginName"]).to.equal(pluginName)
+      expect(handler.actionType).to.equal("prepareEnvironment")
+      expect(handler.pluginName).to.equal(pluginName)
     })
 
     it("should throw if no handler is available", async () => {
@@ -397,13 +402,22 @@ describe("ActionHelper", () => {
   })
 
   describe("getModuleActionHandler", () => {
-    it("should return last configured handler for specified module action type", async () => {
+    const path = process.cwd()
+
+    it("should return default handler, if specified and no handler is available", async () => {
       const gardenA = await makeTestGardenA()
       const actionsA = await gardenA.getActionHelper()
-      const handler = await actionsA.getModuleActionHandler({ actionType: "deployService", moduleType: "test" })
-
-      expect(handler["actionType"]).to.equal("deployService")
-      expect(handler["pluginName"]).to.equal("test-plugin-b")
+      const defaultHandler = async () => {
+        return { code: 0, output: "" }
+      }
+      const handler = await actionsA.getModuleActionHandler({
+        actionType: "execInService",
+        moduleType: "container",
+        defaultHandler,
+      })
+      expect(handler.actionType).to.equal("execInService")
+      expect(handler.moduleType).to.equal("container")
+      expect(handler.pluginName).to.equal(defaultProvider.name)
     })
 
     it("should throw if no handler is available", async () => {
@@ -414,11 +428,416 @@ describe("ActionHelper", () => {
         "parameter",
       )
     })
+
+    context("when no providers extend the module type with requested handler", () => {
+      it("should return the handler from the provider that created it", async () => {
+        const foo: GardenPlugin = {
+          name: "foo",
+          createModuleTypes: [
+            {
+              name: "bar",
+              docs: "bar",
+              schema: joi.object(),
+              handlers: {
+                configure: async ({ moduleConfig }) => moduleConfig,
+                build: async () => ({}),
+              },
+            },
+          ],
+        }
+
+        const projectConfig: ProjectConfig = {
+          apiVersion: DEFAULT_API_VERSION,
+          kind: "Project",
+          name: "test",
+          path,
+          defaultEnvironment: "default",
+          dotIgnoreFiles: [],
+          environments: [
+            { name: "default", variables: {} },
+          ],
+          providers: [
+            { name: "foo" },
+          ],
+          variables: {},
+        }
+
+        const _garden = await Garden.factory(path, {
+          plugins: [foo],
+          config: projectConfig,
+        })
+
+        const _actions = await _garden.getActionHelper()
+
+        const handler = await _actions.getModuleActionHandler({ actionType: "build", moduleType: "bar" })
+
+        expect(handler.actionType).to.equal("build")
+        expect(handler.moduleType).to.equal("bar")
+        expect(handler.pluginName).to.equal("foo")
+      })
+    })
+
+    context("when one provider overrides the requested handler on the module type", () => {
+      it("should return the handler from the extending provider", async () => {
+        const projectConfig: ProjectConfig = {
+          apiVersion: DEFAULT_API_VERSION,
+          kind: "Project",
+          name: "test",
+          path,
+          defaultEnvironment: "default",
+          dotIgnoreFiles: [],
+          environments: [
+            { name: "default", variables: {} },
+          ],
+          providers: [
+            { name: "base" },
+            { name: "foo" },
+          ],
+          variables: {},
+        }
+
+        const base: GardenPlugin = {
+          name: "base",
+          createModuleTypes: [
+            {
+              name: "bar",
+              docs: "bar",
+              schema: joi.object(),
+              handlers: {
+                configure: async ({ moduleConfig }) => moduleConfig,
+                build: async () => ({}),
+              },
+            },
+          ],
+        }
+        const foo: GardenPlugin = {
+          name: "foo",
+          dependencies: ["base"],
+          extendModuleTypes: [
+            {
+              name: "bar",
+              handlers: {
+                build: async () => ({}),
+              },
+            },
+          ],
+        }
+
+        const _garden = await Garden.factory(path, {
+          plugins: [base, foo],
+          config: projectConfig,
+        })
+
+        const _actions = await _garden.getActionHelper()
+
+        const handler = await _actions.getModuleActionHandler({ actionType: "build", moduleType: "bar" })
+
+        expect(handler.actionType).to.equal("build")
+        expect(handler.moduleType).to.equal("bar")
+        expect(handler.pluginName).to.equal("foo")
+      })
+    })
+
+    context("when multiple providers extend the module type with requested handler", () => {
+      it("should return the handler that is not being overridden by another handler", async () => {
+        const projectConfig: ProjectConfig = {
+          apiVersion: DEFAULT_API_VERSION,
+          kind: "Project",
+          name: "test",
+          path,
+          defaultEnvironment: "default",
+          dotIgnoreFiles: [],
+          environments: [
+            { name: "default", variables: {} },
+          ],
+          providers: [
+            { name: "base" },
+            // The order here matters, to verify that the dependency ordering works
+            { name: "too" },
+            { name: "foo" },
+          ],
+          variables: {},
+        }
+
+        const base: GardenPlugin = {
+          name: "base",
+          createModuleTypes: [
+            {
+              name: "bar",
+              docs: "bar",
+              schema: joi.object(),
+              handlers: {
+                configure: async ({ moduleConfig }) => moduleConfig,
+                build: async () => ({}),
+              },
+            },
+          ],
+        }
+        const foo: GardenPlugin = {
+          name: "foo",
+          dependencies: ["base"],
+          extendModuleTypes: [
+            {
+              name: "bar",
+              handlers: {
+                build: async () => ({}),
+              },
+            },
+          ],
+        }
+        const too: GardenPlugin = {
+          name: "too",
+          dependencies: ["base", "foo"],
+          extendModuleTypes: [
+            {
+              name: "bar",
+              handlers: {
+                build: async () => ({}),
+              },
+            },
+          ],
+        }
+
+        const _garden = await Garden.factory(path, {
+          plugins: [base, too, foo],
+          config: projectConfig,
+        })
+
+        const _actions = await _garden.getActionHelper()
+
+        const handler = await _actions.getModuleActionHandler({ actionType: "build", moduleType: "bar" })
+
+        expect(handler.actionType).to.equal("build")
+        expect(handler.moduleType).to.equal("bar")
+        expect(handler.pluginName).to.equal("too")
+      })
+
+      context("when multiple providers are side by side in the dependency graph", () => {
+        it("should return the last configured handler for the specified module action type", async () => {
+          const projectConfig: ProjectConfig = {
+            apiVersion: DEFAULT_API_VERSION,
+            kind: "Project",
+            name: "test",
+            path,
+            defaultEnvironment: "default",
+            dotIgnoreFiles: [],
+            environments: [
+              { name: "default", variables: {} },
+            ],
+            providers: [
+              { name: "base" },
+              // The order here matters, since we use that as a "tie-breaker"
+              { name: "foo" },
+              { name: "too" },
+            ],
+            variables: {},
+          }
+
+          const base: GardenPlugin = {
+            name: "base",
+            createModuleTypes: [
+              {
+                name: "bar",
+                docs: "bar",
+                schema: joi.object(),
+                handlers: {
+                  configure: async ({ moduleConfig }) => moduleConfig,
+                  build: async () => ({}),
+                },
+              },
+            ],
+          }
+          const foo: GardenPlugin = {
+            name: "foo",
+            dependencies: ["base"],
+            extendModuleTypes: [
+              {
+                name: "bar",
+                handlers: {
+                  build: async () => ({}),
+                },
+              },
+            ],
+          }
+          const too: GardenPlugin = {
+            name: "too",
+            dependencies: ["base"],
+            extendModuleTypes: [
+              {
+                name: "bar",
+                handlers: {
+                  build: async () => ({}),
+                },
+              },
+            ],
+          }
+
+          const _garden = await Garden.factory(path, {
+            plugins: [base, too, foo],
+            config: projectConfig,
+          })
+
+          const _actions = await _garden.getActionHelper()
+
+          const handler = await _actions.getModuleActionHandler({ actionType: "build", moduleType: "bar" })
+
+          expect(handler.actionType).to.equal("build")
+          expect(handler.moduleType).to.equal("bar")
+          expect(handler.pluginName).to.equal("too")
+        })
+      })
+    })
+
+    context("when the handler was added by a provider and not specified in the creating provider", () => {
+      it("should return the added handler", async () => {
+        const projectConfig: ProjectConfig = {
+          apiVersion: DEFAULT_API_VERSION,
+          kind: "Project",
+          name: "test",
+          path,
+          defaultEnvironment: "default",
+          dotIgnoreFiles: [],
+          environments: [
+            { name: "default", variables: {} },
+          ],
+          providers: [
+            { name: "base" },
+            { name: "foo" },
+          ],
+          variables: {},
+        }
+
+        const base: GardenPlugin = {
+          name: "base",
+          createModuleTypes: [
+            {
+              name: "bar",
+              docs: "bar",
+              schema: joi.object(),
+              handlers: {
+                configure: async ({ moduleConfig }) => moduleConfig,
+              },
+            },
+          ],
+        }
+        const foo: GardenPlugin = {
+          name: "foo",
+          dependencies: ["base"],
+          extendModuleTypes: [
+            {
+              name: "bar",
+              handlers: {
+                build: async () => ({}),
+              },
+            },
+          ],
+        }
+
+        const _garden = await Garden.factory(path, {
+          plugins: [base, foo],
+          config: projectConfig,
+        })
+
+        const _actions = await _garden.getActionHelper()
+
+        const handler = await _actions.getModuleActionHandler({ actionType: "build", moduleType: "bar" })
+
+        expect(handler.actionType).to.equal("build")
+        expect(handler.moduleType).to.equal("bar")
+        expect(handler.pluginName).to.equal("foo")
+      })
+    })
+  })
+
+  describe("callActionHandler", () => {
+    it("should call the handler with a super argument if the handler is overriding another", async () => {
+      const emptyActions = new ActionHelper(garden, [], [])
+
+      const _super = async () => {
+        return { ready: true, outputs: {} }
+      }
+
+      const handler: ActionHandler<any, any> = async (params) => {
+        expect(params.super).to.equal(_super)
+
+        return { ready: true, outputs: {} }
+      }
+
+      handler.super = _super
+
+      await emptyActions["callActionHandler"]({
+        actionType: "getEnvironmentStatus",  // Doesn't matter which one it is
+        pluginName: "test-plugin",
+        params: {
+          log,
+        },
+        defaultHandler: handler,
+      })
+    })
+  })
+
+  describe("callModuleHandler", () => {
+    it("should call the handler with a super argument if the handler is overriding another", async () => {
+      const emptyActions = new ActionHelper(garden, [], [])
+
+      const graph = await garden.getConfigGraph()
+      const moduleA = await graph.getModule("module-a")
+
+      const _super = async () => {
+        return { ready: true, outputs: {} }
+      }
+
+      const handler: ActionHandler<any, any> = async (params) => {
+        expect(params.super).to.equal(_super)
+        return { ready: true, outputs: {} }
+      }
+
+      handler.super = _super
+
+      await emptyActions["callModuleHandler"]({
+        actionType: "getBuildStatus",  // Doesn't matter which one it is
+        params: {
+          module: moduleA,
+          log,
+        },
+        defaultHandler: handler,
+      })
+    })
   })
 
   describe("callServiceHandler", () => {
+    it("should call the handler with a super argument if the handler is overriding another", async () => {
+      const emptyActions = new ActionHelper(garden, [], [])
+
+      const graph = await garden.getConfigGraph()
+      const serviceA = await graph.getService("service-a")
+
+      const _super = async () => {
+        return { forwardablePorts: [], state: <ServiceState>"ready", detail: {} }
+      }
+
+      const handler: ActionHandler<any, any> = async (params) => {
+        expect(params.super).to.equal(_super)
+        return { forwardablePorts: [], state: <ServiceState>"ready", detail: {} }
+      }
+
+      handler.super = _super
+
+      await emptyActions["callServiceHandler"]({
+        actionType: "deployService",  // Doesn't matter which one it is
+        params: {
+          service: serviceA,
+          runtimeContext,
+          log,
+          hotReload: false,
+          force: false,
+        },
+        defaultHandler: handler,
+      })
+    })
+
     it("should interpolate runtime template strings", async () => {
-      const emptyActions = new ActionHelper(garden, [])
+      const emptyActions = new ActionHelper(garden, [], [])
 
       garden["moduleConfigs"]["module-a"].spec.foo = "\${runtime.services.service-b.outputs.foo}"
 
@@ -464,7 +883,7 @@ describe("ActionHelper", () => {
     })
 
     it("should throw if one or more runtime variables remain unresolved after re-resolution", async () => {
-      const emptyActions = new ActionHelper(garden, [])
+      const emptyActions = new ActionHelper(garden, [], [])
 
       garden["moduleConfigs"]["module-a"].spec.services[0].foo = "\${runtime.services.service-b.outputs.foo}"
 
@@ -508,8 +927,58 @@ describe("ActionHelper", () => {
   })
 
   describe("callTaskHandler", () => {
+    it("should call the handler with a super argument if the handler is overriding another", async () => {
+      const emptyActions = new ActionHelper(garden, [], [])
+
+      const graph = await garden.getConfigGraph()
+      const taskA = await graph.getTask("task-a")
+
+      const _super = async () => {
+        return {
+          moduleName: "module-a",
+          taskName: "task-a",
+          command: [],
+          outputs: { moo: "boo" },
+          success: true,
+          version: task.module.version.versionString,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          log: "boo",
+        }
+      }
+
+      const handler: ActionHandler<any, any> = async (params) => {
+        expect(params.super).to.equal(_super)
+        return {
+          moduleName: "module-a",
+          taskName: "task-a",
+          command: [],
+          outputs: { moo: "boo" },
+          success: true,
+          version: task.module.version.versionString,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          log: "boo",
+        }
+      }
+
+      handler.super = _super
+
+      await emptyActions["callTaskHandler"]({
+        actionType: "runTask",
+        params: {
+          task: taskA,
+          runtimeContext,
+          log,
+          taskVersion: task.module.version,
+          interactive: false,
+        },
+        defaultHandler: handler,
+      })
+    })
+
     it("should interpolate runtime template strings", async () => {
-      const emptyActions = new ActionHelper(garden, [])
+      const emptyActions = new ActionHelper(garden, [], [])
 
       garden["moduleConfigs"]["module-a"].spec.tasks[0].foo = "\${runtime.services.service-b.outputs.foo}"
 
@@ -550,8 +1019,8 @@ describe("ActionHelper", () => {
           expect(params.task.spec.foo).to.equal("bar")
 
           return {
-            moduleName: "module-b",
-            taskName: "task-b",
+            moduleName: "module-a",
+            taskName: "task-a",
             command: [],
             outputs: { moo: "boo" },
             success: true,
@@ -565,7 +1034,7 @@ describe("ActionHelper", () => {
     })
 
     it("should throw if one or more runtime variables remain unresolved after re-resolution", async () => {
-      const emptyActions = new ActionHelper(garden, [])
+      const emptyActions = new ActionHelper(garden, [], [])
 
       garden["moduleConfigs"]["module-a"].spec.tasks[0].foo = "\${runtime.services.service-b.outputs.foo}"
 
@@ -612,6 +1081,7 @@ describe("ActionHelper", () => {
 
 const testPlugin = createGardenPlugin({
   name: "test-plugin",
+
   handlers: <PluginActionHandlers>{
     getEnvironmentStatus: async (params) => {
       validate(params, pluginActionDescriptions.getEnvironmentStatus.paramsSchema)
@@ -646,6 +1116,7 @@ const testPlugin = createGardenPlugin({
       return { found: true }
     },
   },
+
   createModuleTypes: [{
     name: "test",
 

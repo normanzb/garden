@@ -14,6 +14,7 @@ import { Service, serviceSchema } from "../service"
 import { Task } from "../task"
 import { taskSchema } from "../../config/task"
 import { joi } from "../../config/common"
+import { ActionHandler } from "./plugin"
 
 export interface PluginActionContextParams {
   ctx: PluginContext
@@ -21,6 +22,7 @@ export interface PluginActionContextParams {
 
 export interface PluginActionParamsBase extends PluginActionContextParams {
   log: LogEntry
+  super?: ActionHandler<any, any>
 }
 
 // Note: not specifying this further because we will later remove it from the API

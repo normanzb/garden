@@ -60,7 +60,7 @@ export class GitHandler extends VcsHandler {
 
   private gitCli(log: LogEntry, cwd: string): GitCli {
     return async (...args: string[]) => {
-      log.silly(`Calling git with args '${args.join(" ")}`)
+      log.silly(`Calling git with args '${args.join(" ")}'`)
       const { stdout } = await execa("git", args, { cwd, maxBuffer: 10 * 1024 * 1024 })
       return stdout.split("\n").filter(line => line.length > 0)
     }

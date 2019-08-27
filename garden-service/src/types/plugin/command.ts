@@ -41,6 +41,7 @@ export interface PluginCommand {
   title?: string | ((params: { environmentName: string }) => string | Promise<string>)
   // TODO: allow arguments
   handler: PluginCommandHandler
+  super?: PluginCommand
 }
 
 export const pluginCommandSchema = joi.object()
