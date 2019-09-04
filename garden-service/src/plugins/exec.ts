@@ -47,36 +47,44 @@ function execWithStream(cmd: string, log: LogEntry, opts: execa.Options) {
 }
 
 export interface ExecTestSpec extends BaseTestSpec {
-  command: string[],
-  env: { [key: string]: string },
+  command: string[]
+  env: { [key: string]: string }
 }
 
 export const execTestSchema = baseTestSpecSchema
   .keys({
-    command: joi.array().items(joi.string())
-      .description(dedent`
+    command: joi
+      .array()
+      .items(joi.string())
+      .description(
+        dedent`
         The command to run to test the module.
 
         ${execPathDoc}
-      `)
+      `
+      )
       .required(),
     env: joiEnvVars(),
   })
   .description("The test specification of an exec module.")
 
 export interface ExecTaskSpec extends BaseTaskSpec {
-  command: string[],
-  env: { [key: string]: string },
+  command: string[]
+  env: { [key: string]: string }
 }
 
 export const execTaskSpecSchema = baseTaskSpecSchema
   .keys({
-    command: joi.array().items(joi.string())
-      .description(dedent`
+    command: joi
+      .array()
+      .items(joi.string())
+      .description(
+        dedent`
         The command to run.
 
         ${execPathDoc}
-      `)
+      `
+      )
       .required(),
     env: joiEnvVars(),
   })
@@ -87,10 +95,10 @@ interface ExecBuildSpec extends BaseBuildSpec {
 }
 
 export interface ExecModuleSpecBase extends ModuleSpec {
-  build: ExecBuildSpec,
-  env: { [key: string]: string },
-  tasks: ExecTaskSpec[],
-  tests: ExecTestSpec[],
+  build: ExecBuildSpec
+  env: { [key: string]: string }
+  tasks: ExecTaskSpec[]
+  tests: ExecTestSpec[]
 }
 
 export interface ExecModuleSpec extends ExecModuleSpecBase {
@@ -99,48 +107,55 @@ export interface ExecModuleSpec extends ExecModuleSpecBase {
 
 export type ExecModuleConfig = ModuleConfig<ExecModuleSpec>
 
-export const execBuildSpecSchema = baseBuildSpecSchema
-  .keys({
-    command: joiArray(joi.string())
-      .description(dedent`
+export const execBuildSpecSchema = baseBuildSpecSchema.keys({
+  command: joiArray(joi.string())
+    .description(
+      dedent`
         The command to run to perform the build.
 
         ${execPathDoc}
-      `)
-      .example([["npm", "run", "build"], {}]),
-  })
+      `
+    )
+    .example([["npm", "run", "build"], {}]),
+})
 
-export const execModuleSpecSchema = joi.object()
+export const execModuleSpecSchema = joi
+  .object()
   .keys({
-    local: joi.boolean()
-      .description(dedent`
+    local: joi
+      .boolean()
+      .description(
+        dedent`
         If set to true, Garden will run the build command, tests, and tasks in the module source directory,
         instead of in the Garden build directory (under .garden/build/<module-name>).
 
         Garden will therefore not stage the build for local exec modules. This means that include/exclude filters
         and ignore files are not applied to local exec modules.
-      `)
+      `
+      )
       .default(false),
     build: execBuildSpecSchema,
     env: joiEnvVars(),
-    tasks: joiArray(execTaskSpecSchema)
-      .description("A list of tasks that can be run in this module."),
-    tests: joiArray(execTestSchema)
-      .description("A list of tests to run in the module."),
+    tasks: joiArray(execTaskSpecSchema).description("A list of tasks that can be run in this module."),
+    tests: joiArray(execTestSchema).description("A list of tests to run in the module."),
   })
   .unknown(false)
   .description("The module specification for an exec module.")
 
-export interface ExecModule extends Module<ExecModuleSpec, CommonServiceSpec, ExecTestSpec> { }
+export interface ExecModule extends Module<ExecModuleSpec, CommonServiceSpec, ExecTestSpec> {}
 
-export async function configureExecModule(
-  { ctx, moduleConfig }: ConfigureModuleParams<ExecModule>,
-): Promise<ConfigureModuleResult> {
-
+export async function configureExecModule({
+  ctx,
+  moduleConfig,
+}: ConfigureModuleParams<ExecModule>): Promise<ConfigureModuleResult> {
   const buildDeps = moduleConfig.build.dependencies
-  if (moduleConfig.spec.local && buildDeps.some(d => d.copy.length > 0)) {
-    const buildDependenciesWithCopySpec = buildDeps.filter(d => !!d.copy).map(d => d.name).join(", ")
-    throw new ConfigurationError(dedent`
+  if (moduleConfig.spec.local && buildDeps.some((d) => d.copy.length > 0)) {
+    const buildDependenciesWithCopySpec = buildDeps
+      .filter((d) => !!d.copy)
+      .map((d) => d.name)
+      .join(", ")
+    throw new ConfigurationError(
+      dedent`
       Invalid exec module configuration: Module ${moduleConfig.name} copies ${buildDependenciesWithCopySpec}
 
       A local exec module cannot have a build dependency with a copy spec.
@@ -148,7 +163,8 @@ export async function configureExecModule(
       {
         buildDependenciesWithCopySpec,
         buildConfig: moduleConfig.build,
-      })
+      }
+    )
   }
 
   moduleConfig.spec = validateWithPath({
@@ -159,14 +175,14 @@ export async function configureExecModule(
     projectRoot: ctx.projectRoot,
   })
 
-  moduleConfig.taskConfigs = moduleConfig.spec.tasks.map(t => ({
+  moduleConfig.taskConfigs = moduleConfig.spec.tasks.map((t) => ({
     name: t.name,
     dependencies: t.dependencies,
     timeout: t.timeout,
     spec: t,
   }))
 
-  moduleConfig.testConfigs = moduleConfig.spec.tests.map(t => ({
+  moduleConfig.testConfigs = moduleConfig.spec.tests.map((t) => ({
     name: t.name,
     dependencies: t.dependencies,
     spec: t,
@@ -202,7 +218,7 @@ export async function buildExecModule({ module, log }: BuildModuleParams<ExecMod
       cwd: module.buildPath,
       env: {
         ...process.env,
-        ...mapValues(module.spec.env, v => v.toString()),
+        ...mapValues(module.spec.env, (v) => v.toString()),
       },
       shell: true,
     })
@@ -227,8 +243,8 @@ export async function testExecModule({ module, log, testConfig }: TestModulePara
     env: {
       ...process.env,
       // need to cast the values to strings
-      ...mapValues(module.spec.env, v => v + ""),
-      ...mapValues(testConfig.spec.env, v => v + ""),
+      ...mapValues(module.spec.env, (v) => v + ""),
+      ...mapValues(testConfig.spec.env, (v) => v + ""),
     },
     reject: false,
     shell: true,
@@ -256,8 +272,8 @@ export async function runExecTask(params: RunTaskParams): Promise<RunTaskResult>
     cwd: module.buildPath,
     env: {
       ...process.env,
-      ...mapValues(module.spec.env, v => v.toString()),
-      ...mapValues(task.spec.env, v => v.toString()),
+      ...mapValues(module.spec.env, (v) => v.toString()),
+      ...mapValues(task.spec.env, (v) => v.toString()),
     },
     shell: true,
   })
@@ -283,9 +299,10 @@ export async function runExecTask(params: RunTaskParams): Promise<RunTaskResult>
 
 export const execPlugin = createGardenPlugin({
   name: "exec",
-  createModuleTypes: [{
-    name: "exec",
-    docs: dedent`
+  createModuleTypes: [
+    {
+      name: "exec",
+      docs: dedent`
       A simple module for executing commands in your shell. This can be a useful escape hatch if no other module
       type fits your needs, and you just need to execute something (as opposed to deploy it, track its status etc.).
 
@@ -297,26 +314,27 @@ export const execPlugin = createGardenPlugin({
       This means that include/exclude filters and ignore files are not applied to local exec modules, as the
       filtering is done during the sync.
     `,
-    moduleOutputsSchema: joi.object().keys({}),
-    schema: execModuleSpecSchema,
-    taskOutputsSchema: joi.object()
-      .keys({
-        log: joi.string()
+      moduleOutputsSchema: joi.object().keys({}),
+      schema: execModuleSpecSchema,
+      taskOutputsSchema: joi.object().keys({
+        log: joi
+          .string()
           .allow("")
           .default("")
           .description(
             "The full log from the executed task. " +
-            "(Pro-tip: Make it machine readable so it can be parsed by dependant tasks and services!)",
+              "(Pro-tip: Make it machine readable so it can be parsed by dependant tasks and services!)"
           ),
       }),
-    handlers: {
-      configure: configureExecModule,
-      getBuildStatus: getExecModuleBuildStatus,
-      build: buildExecModule,
-      runTask: runExecTask,
-      testModule: testExecModule,
+      handlers: {
+        configure: configureExecModule,
+        getBuildStatus: getExecModuleBuildStatus,
+        build: buildExecModule,
+        runTask: runExecTask,
+        testModule: testExecModule,
+      },
     },
-  }],
+  ],
 })
 
 export const gardenPlugin = execPlugin

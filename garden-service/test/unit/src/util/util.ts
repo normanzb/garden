@@ -1,11 +1,5 @@
 import { expect } from "chai"
-import {
-  pickKeys,
-  getEnvVarName,
-  deepOmitUndefined,
-  deepFilter,
-  splitLast,
-} from "../../../../src/util/util"
+import { pickKeys, getEnvVarName, deepOmitUndefined, deepFilter, splitLast } from "../../../../src/util/util"
 import { expectError } from "../../../helpers"
 import { splitFirst } from "../../../../src/util/util"
 
@@ -24,23 +18,29 @@ describe("util", () => {
 
     it("should throw if one or more keys are missing", async () => {
       const obj = { a: 1, b: 2, c: 3 }
-      await expectError(() => pickKeys(obj, <any>["a", "foo", "bar"]), (err) => {
-        expect(err.message).to.equal("Could not find key(s): foo, bar")
-        expect(err.detail.missing).to.eql(["foo", "bar"])
-        expect(err.detail.available).to.eql(["a", "b", "c"])
-      })
+      await expectError(
+        () => pickKeys(obj, <any>["a", "foo", "bar"]),
+        (err) => {
+          expect(err.message).to.equal("Could not find key(s): foo, bar")
+          expect(err.detail.missing).to.eql(["foo", "bar"])
+          expect(err.detail.available).to.eql(["a", "b", "c"])
+        }
+      )
     })
 
     it("should use given description in error message", async () => {
       const obj = { a: 1, b: 2, c: 3 }
-      await expectError(() => pickKeys(obj, <any>["a", "foo", "bar"], "banana"), (err) => {
-        expect(err.message).to.equal("Could not find banana(s): foo, bar")
-      })
+      await expectError(
+        () => pickKeys(obj, <any>["a", "foo", "bar"], "banana"),
+        (err) => {
+          expect(err.message).to.equal("Could not find banana(s): foo, bar")
+        }
+      )
     })
   })
 
   describe("deepFilter", () => {
-    const fn = v => v !== 99
+    const fn = (v) => v !== 99
 
     it("should filter keys in a simple object", () => {
       const obj = {
@@ -73,9 +73,7 @@ describe("util", () => {
       const obj = {
         a: 1,
         b: 2,
-        c: [
-          { d: 3, e: 99 },
-        ],
+        c: [{ d: 3, e: 99 }],
       }
       expect(deepFilter(obj, fn)).to.eql({ a: 1, b: 2, c: [{ d: 3 }] })
     })
@@ -113,9 +111,7 @@ describe("util", () => {
       const obj = {
         a: 1,
         b: 2,
-        c: [
-          { d: 3, e: undefined },
-        ],
+        c: [{ d: 3, e: undefined }],
       }
       expect(deepOmitUndefined(obj)).to.eql({ a: 1, b: 2, c: [{ d: 3 }] })
     })

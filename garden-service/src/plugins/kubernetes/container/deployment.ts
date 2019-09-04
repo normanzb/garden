@@ -35,7 +35,7 @@ export const DEFAULT_CPU_REQUEST = "10m"
 export const DEFAULT_MEMORY_REQUEST = "64Mi"
 
 export async function deployContainerService(
-  params: DeployServiceParams<ContainerModule>,
+  params: DeployServiceParams<ContainerModule>
 ): Promise<ContainerServiceStatus> {
   const { deploymentStrategy } = params.ctx.provider.config
 
@@ -47,7 +47,8 @@ export async function deployContainerService(
 }
 
 export async function deployContainerServiceRolling(
-  params: DeployServiceParams<ContainerModule>): Promise<ContainerServiceStatus> {
+  params: DeployServiceParams<ContainerModule>
+): Promise<ContainerServiceStatus> {
   const { ctx, service, runtimeContext, force, log, hotReload } = params
   const k8sCtx = <KubernetesPluginContext>ctx
 
@@ -72,8 +73,8 @@ export async function deployContainerServiceRolling(
 }
 
 export async function deployContainerServiceBlueGreen(
-  params: DeployServiceParams<ContainerModule>): Promise<ContainerServiceStatus> {
-
+  params: DeployServiceParams<ContainerModule>
+): Promise<ContainerServiceStatus> {
   const { ctx, service, runtimeContext, force, log, hotReload } = params
   const k8sCtx = <KubernetesPluginContext>ctx
   const namespace = await getAppNamespace(k8sCtx, log, k8sCtx.provider)
@@ -85,8 +86,9 @@ export async function deployContainerServiceBlueGreen(
   const api = await KubeApi.factory(log, provider)
 
   // Retrieve the k8s service referring to the Garden service which is already deployed
-  const currentService = (await api.core.listNamespacedService(namespace))
-    .items.filter(s => s.metadata.name === service.name)
+  const currentService = (await api.core.listNamespacedService(namespace)).items.filter(
+    (s) => s.metadata.name === service.name
+  )
 
   // If none it means this is the first deployment
   const isServiceAlreadyDeployed = currentService.length > 0
@@ -102,7 +104,6 @@ export async function deployContainerServiceBlueGreen(
       resources: manifests,
       log,
     })
-
   } else {
     // A k8s service matching the current Garden service exist in the cluster.
     // Proceeding with blue-green deployment
@@ -110,7 +111,7 @@ export async function deployContainerServiceBlueGreen(
     const versionKey = gardenAnnotationKey("version")
 
     // Remove Service manifest from generated resources
-    const filteredManifests = manifests.filter(manifest => manifest.kind !== "Service")
+    const filteredManifests = manifests.filter((manifest) => manifest.kind !== "Service")
 
     // Apply new Deployment manifest (deploy the Green version)
     await apply({ log, provider, manifests: filteredManifests, force, namespace })
@@ -139,7 +140,7 @@ export async function deployContainerServiceBlueGreen(
     // Update service (divert traffic from Blue to Green)
 
     // First patch the generated service to point to the new version of the deployment
-    const serviceManifest = find(manifests, manifest => manifest.kind == "Service")
+    const serviceManifest = find(manifests, (manifest) => manifest.kind == "Service")
     const patchedServiceManifest = merge(serviceManifest, servicePatchBody)
     // Compare with the deployed Service
     const result = await compareDeployedObjects(k8sCtx, api, namespace, [patchedServiceManifest], log, true)
@@ -169,9 +170,7 @@ export async function deployContainerServiceBlueGreen(
       namespace,
       objectTypes: workloadTypes,
       // Find workloads that match this service, but have a different version
-      selector:
-        `${gardenAnnotationKey("service")}=${service.name},` +
-        `${versionKey}!=${newVersion}`,
+      selector: `${gardenAnnotationKey("service")}=${service.name},` + `${versionKey}!=${newVersion}`,
     })
   }
   return getContainerServiceStatus(params)
@@ -182,7 +181,7 @@ export async function createContainerManifests(
   log: LogEntry,
   service: ContainerService,
   runtimeContext: RuntimeContext,
-  enableHotReload: boolean,
+  enableHotReload: boolean
 ) {
   const k8sCtx = <KubernetesPluginContext>ctx
   const version = service.module.version
@@ -206,18 +205,22 @@ export async function createContainerManifests(
 }
 
 interface CreateDeploymentParams {
-  provider: KubernetesProvider,
-  service: ContainerService,
-  runtimeContext: RuntimeContext,
-  namespace: string,
-  enableHotReload: boolean,
-  log: LogEntry,
+  provider: KubernetesProvider
+  service: ContainerService
+  runtimeContext: RuntimeContext
+  namespace: string
+  enableHotReload: boolean
+  log: LogEntry
 }
 
-export async function createWorkloadResource(
-  { provider, service, runtimeContext, namespace, enableHotReload, log }: CreateDeploymentParams,
-): Promise<KubernetesWorkload> {
-
+export async function createWorkloadResource({
+  provider,
+  service,
+  runtimeContext,
+  namespace,
+  enableHotReload,
+  log,
+}: CreateDeploymentParams): Promise<KubernetesWorkload> {
   const spec = service.spec
   let configuredReplicas = service.spec.replicas
   const deployment: any = deploymentConfig(service, configuredReplicas, namespace)
@@ -308,7 +311,7 @@ export async function createWorkloadResource(
       type: "RollingUpdate",
     }
 
-    for (const port of ports.filter(p => p.hostPort)) {
+    for (const port of ports.filter((p) => p.hostPort)) {
       // For daemons we can expose host ports directly on the Pod, as opposed to only via the Service resource.
       // This allows us to choose any port.
       // TODO: validate that conflicting ports are not defined.
@@ -318,7 +321,6 @@ export async function createWorkloadResource(
         hostPort: port.hostPort,
       })
     }
-
   } else {
     deployment.spec.replicas = configuredReplicas
 
@@ -335,7 +337,7 @@ export async function createWorkloadResource(
 
   if (provider.config.imagePullSecrets.length > 0) {
     // add any configured imagePullSecrets
-    deployment.spec.template.spec.imagePullSecrets = provider.config.imagePullSecrets.map(s => ({ name: s.name }))
+    deployment.spec.template.spec.imagePullSecrets = provider.config.imagePullSecrets.map((s) => ({ name: s.name }))
   }
 
   // this is important for status checks to work correctly, because how K8s normalizes resources
@@ -421,7 +423,6 @@ function deploymentConfig(service: Service, configuredReplicas: number, namespac
 }
 
 function configureHealthCheck(container, spec): void {
-
   const readinessPeriodSeconds = 1
   const readinessFailureThreshold = 90
 
@@ -454,7 +455,7 @@ function configureHealthCheck(container, spec): void {
     container.readinessProbe.httpGet = httpGet
     container.livenessProbe.httpGet = httpGet
   } else if (spec.healthCheck.command) {
-    container.readinessProbe.exec = { command: spec.healthCheck.command.map(s => s.toString()) }
+    container.readinessProbe.exec = { command: spec.healthCheck.command.map((s) => s.toString()) }
     container.livenessProbe.exec = container.readinessProbe.exec
   } else if (spec.healthCheck.tcpPort) {
     container.readinessProbe.tcpSocket = {
@@ -464,7 +465,6 @@ function configureHealthCheck(container, spec): void {
   } else {
     throw new Error("Must specify type of health check when configuring health check.")
   }
-
 }
 
 function configureVolumes(deployment, container, spec): void {
@@ -514,8 +514,7 @@ function configureVolumes(deployment, container, spec): void {
  * converts /src/foo into src/foo/
  */
 export function rsyncTargetPath(path: string) {
-  return path.replace(/^\/*/, "")
-    .replace(/\/*$/, "/")
+  return path.replace(/^\/*/, "").replace(/\/*$/, "/")
 }
 
 export async function deleteService(params: DeleteServiceParams): Promise<ContainerServiceStatus> {

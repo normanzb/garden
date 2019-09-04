@@ -25,10 +25,13 @@ export async function configureMicrok8sAddons(log: LogEntry, addons: string[]) {
     })
   }
 
-  const missingAddons = addons.filter(addon => !status.includes(`${addon}: enabled`))
+  const missingAddons = addons.filter((addon) => !status.includes(`${addon}: enabled`))
 
   if (missingAddons.length > 0) {
-    log.info({ section: "microk8s", msg: `enabling required addons (${missingAddons.join(", ")})` })
+    log.info({
+      section: "microk8s",
+      msg: `enabling required addons (${missingAddons.join(", ")})`,
+    })
     await execa("microk8s.enable", missingAddons)
   }
 }

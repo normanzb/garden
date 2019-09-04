@@ -32,7 +32,7 @@ import { safeLoad, safeDump } from "js-yaml"
 import { readFile } from "fs-extra"
 
 import { Omit } from "../../util/util"
-import { zip, omitBy, isObject, isPlainObject, keyBy } from "lodash"
+import { zip, omitBy, isObject, isPlainObject, keyBy, set } from "lodash"
 import { GardenBaseError, RuntimeError, ConfigurationError } from "../../exceptions"
 import { KubernetesResource, KubernetesServerResource, KubernetesServerList } from "./types"
 import { LogEntry } from "../../logger/log-entry"
@@ -66,7 +66,8 @@ const apiInfoLock = new AsyncLock()
 
 // NOTE: be warned, the API of the client library is very likely to change
 
-type K8sApi = CoreV1Api
+type K8sApi =
+  | CoreV1Api
   | ExtensionsV1beta1Api
   | RbacAuthorizationV1Api
   | AppsV1Api
@@ -112,6 +113,7 @@ interface List {
 type WrappedList<T extends List> = T["items"] extends Array<infer V> ? KubernetesServerList<V> : KubernetesServerList
 
 // This describes the API classes on KubeApi after they've been wrapped with KubeApi.wrapApi()
+// prettier-ignore
 type WrappedApi<T> = {
   // Wrap each API method
   [P in keyof T]:
@@ -170,7 +172,7 @@ export class KubeApi {
         const coreApi = await this.coreApi.getAPIVersions()
         const apis = await this.apis.getAPIVersions()
 
-        const coreGroups: V1APIGroup[] = coreApi.versions.map(version => ({
+        const coreGroups: V1APIGroup[] = coreApi.versions.map((version) => ({
           apiVersion: "v1",
           kind: "ApiGroup",
           name: version,
@@ -235,20 +237,22 @@ export class KubeApi {
     const groupId = group.preferredVersion!.groupVersion
 
     const lockKey = `${this.context}/${groupId}`
-    const resourceMap = apiInfo.resources[groupId] || await apiInfoLock.acquire(lockKey, async () => {
-      if (apiInfo.resources[groupId]) {
+    const resourceMap =
+      apiInfo.resources[groupId] ||
+      (await apiInfoLock.acquire(lockKey, async () => {
+        if (apiInfo.resources[groupId]) {
+          return apiInfo.resources[groupId]
+        }
+
+        log.debug(`Kubernetes: Getting API resource info for group ${groupId}`)
+        const res = await this.request(log, getGroupBasePath(groupId))
+
+        // We're only interested in the entities themselves, not the sub-resources
+        const resources = res.body.resources.filter((r) => !r.name.includes("/"))
+
+        apiInfo.resources[groupId] = keyBy(resources, "kind")
         return apiInfo.resources[groupId]
-      }
-
-      log.debug(`Kubernetes: Getting API resource info for group ${groupId}`)
-      const res = await this.request(log, getGroupBasePath(groupId))
-
-      // We're only interested in the entities themselves, not the sub-resources
-      const resources = res.body.resources.filter(r => !r.name.includes("/"))
-
-      apiInfo.resources[groupId] = keyBy(resources, "kind")
-      return apiInfo.resources[groupId]
-    })
+      }))
 
     const resource = resourceMap[manifest.kind]
 
@@ -302,7 +306,9 @@ export class KubeApi {
   }
 
   async upsert<K extends keyof CrudMapType>(
-    kind: K, namespace: string, obj: KubernetesResource,
+    kind: K,
+    namespace: string,
+    obj: KubernetesResource
   ): Promise<KubernetesResource> {
     const api = this[crudMap[kind].group]
 
@@ -336,7 +342,8 @@ export class KubeApi {
 
     return new Proxy(api, {
       get: (target: T, name: string, receiver) => {
-        if (!(name in Object.getPrototypeOf(target))) { // assume methods live on the prototype
+        if (!(name in Object.getPrototypeOf(target))) {
+          // assume methods live on the prototype
           return Reflect.get(target, name, receiver)
         }
 
@@ -345,24 +352,29 @@ export class KubeApi {
 
           if (name.startsWith("patch")) {
             // patch the patch bug... (https://github.com/kubernetes-client/javascript/issues/19)
-            target["defaultHeaders"] = { ...defaultHeaders, "content-type": "application/strategic-merge-patch+json" }
+            target["defaultHeaders"] = {
+              ...defaultHeaders,
+              "content-type": "application/strategic-merge-patch+json",
+            }
           }
 
           const output = target[name](...args)
           target["defaultHeaders"] = defaultHeaders
 
           if (typeof output.then === "function") {
-            return output
-              // return the result body direcly
-              .then((res: any) => {
-                if (isPlainObject(res) && res["body"] !== undefined) {
-                  return res["body"]
-                }
-              })
-              // the API errors are not properly formed Error objects
-              .catch((err: Error) => {
-                throw wrapError(err)
-              })
+            return (
+              output
+                // return the result body direcly
+                .then((res: any) => {
+                  if (isPlainObject(res) && res["body"] !== undefined) {
+                    return res["body"]
+                  }
+                })
+                // the API errors are not properly formed Error objects
+                .catch((err: Error) => {
+                  throw wrapError(err)
+                })
+            )
           }
 
           return output
@@ -385,7 +397,11 @@ export async function getKubeConfig(log: LogEntry, provider: KubernetesProvider)
       kubeConfigStr = (await readFile(provider.config.kubeconfig)).toString()
     } else {
       // We use kubectl for this, to support merging multiple paths in the KUBECONFIG env var
-      kubeConfigStr = await kubectl.stdout({ log, provider, args: ["config", "view", "--raw"] })
+      kubeConfigStr = await kubectl.stdout({
+        log,
+        provider,
+        args: ["config", "view", "--raw"],
+      })
     }
     return safeLoad(kubeConfigStr)
   } catch (error) {
@@ -413,8 +429,8 @@ async function getContextConfig(log: LogEntry, provider: KubernetesProvider): Pr
 
   // FIXME: need to patch a bug in the library here (https://github.com/kubernetes-client/javascript/pull/54)
   for (const [a, b] of zip(rawConfig["clusters"] || [], kc.clusters)) {
-    if (a && (<any>a)["cluster"]["insecure-skip-tls-verify"] === true) {
-      (<any>b).skipTLSVerify = true
+    if (a && b && (<any>a)["cluster"]["insecure-skip-tls-verify"] === true) {
+      set(b, "skipTLSVerify", true)
     }
   }
 

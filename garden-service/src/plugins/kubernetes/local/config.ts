@@ -29,15 +29,16 @@ export interface LocalKubernetesConfig extends KubernetesBaseConfig {
 export const configSchema = kubernetesConfigBase
   .keys({
     name: joiProviderName("local-kubernetes"),
-    context: k8sContextSchema
-      .optional(),
-    namespace: joi.string()
+    context: k8sContextSchema.optional(),
+    namespace: joi
+      .string()
       .default(undefined, "<project name>")
       .description(
         "Specify which namespace to deploy services to (defaults to the project name). " +
-        "Note that the framework generates other namespaces as well with this name as a prefix.",
+          "Note that the framework generates other namespaces as well with this name as a prefix."
       ),
-    setupIngressController: joi.string()
+    setupIngressController: joi
+      .string()
       .allow("nginx", false, null)
       .default("nginx")
       .description("Set this to null or false to skip installing/enabling the `nginx` ingress controller."),
@@ -70,14 +71,20 @@ export async function configureProvider({ config, log, projectName }: ConfigureP
     if (currentContext && supportedContexts.includes(currentContext)) {
       // prefer current context if set and supported
       context = currentContext
-      log.debug({ section: config.name, msg: `Using current context: ${context}` })
+      log.debug({
+        section: config.name,
+        msg: `Using current context: ${context}`,
+      })
     } else {
-      const availableContexts = kubeConfig.contexts.map(c => c.name)
+      const availableContexts = kubeConfig.contexts.map((c) => c.name)
 
       for (const supportedContext of supportedContexts) {
         if (availableContexts.includes(supportedContext)) {
           context = supportedContext
-          log.debug({ section: config.name, msg: `Using detected context: ${context}` })
+          log.debug({
+            section: config.name,
+            msg: `Using detected context: ${context}`,
+          })
           break
         }
       }
@@ -85,20 +92,23 @@ export async function configureProvider({ config, log, projectName }: ConfigureP
 
     if (!context && kubeConfig.contexts.length > 0) {
       context = kubeConfig.contexts[0].name
-      log.debug({ section: config.name, msg: `No kubectl context auto-detected, using first available: ${context}` })
+      log.debug({
+        section: config.name,
+        msg: `No kubectl context auto-detected, using first available: ${context}`,
+      })
     }
   }
 
   if (!context) {
     context = supportedContexts[0]
-    log.debug({ section: config.name, msg: `No kubectl context configured, using default: ${context}` })
+    log.debug({
+      section: config.name,
+      msg: `No kubectl context configured, using default: ${context}`,
+    })
   }
 
   if (context === "minikube") {
-    const initCmds = [
-      ["config", "set", "WantUpdateNotification", "false"],
-      ["addons", "enable", "dashboard"],
-    ]
+    const initCmds = [["config", "set", "WantUpdateNotification", "false"], ["addons", "enable", "dashboard"]]
     await Bluebird.map(initCmds, async (cmd) => execa("minikube", cmd))
 
     if (!defaultHostname) {
@@ -113,7 +123,6 @@ export async function configureProvider({ config, log, projectName }: ConfigureP
     }
 
     await setMinikubeDockerEnv()
-
   } else if (context === "microk8s") {
     const addons = ["dns", "dashboard", "registry", "storage"]
 

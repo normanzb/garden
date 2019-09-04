@@ -59,16 +59,20 @@ export async function createNamespace(api: KubeApi, namespace: string) {
 }
 
 interface GetNamespaceParams {
-  log: LogEntry,
-  projectName: string,
-  provider: KubernetesProvider,
-  suffix?: string,
-  skipCreate?: boolean,
+  log: LogEntry
+  projectName: string
+  provider: KubernetesProvider
+  suffix?: string
+  skipCreate?: boolean
 }
 
-export async function getNamespace(
-  { projectName, log, provider, suffix, skipCreate }: GetNamespaceParams,
-): Promise<string> {
+export async function getNamespace({
+  projectName,
+  log,
+  provider,
+  suffix,
+  skipCreate,
+}: GetNamespaceParams): Promise<string> {
   let namespace = provider.config.namespace || projectName
 
   if (suffix) {
@@ -102,8 +106,7 @@ export function getMetadataNamespace(ctx: PluginContext, log: LogEntry, provider
 
 export async function getAllNamespaces(api: KubeApi): Promise<string[]> {
   const allNamespaces = await api.core.listNamespace()
-  return allNamespaces.items
-    .map(n => n.metadata.name)
+  return allNamespaces.items.map((n) => n.metadata.name)
 }
 
 /**
@@ -125,11 +128,11 @@ export async function prepareNamespaces({ ctx, log }: GetEnvironmentStatusParams
     }
     throw new DeploymentError(
       `Unable to connect to Kubernetes cluster. ` +
-      `Please make sure it is running, reachable and that you have the right context configured.`,
+        `Please make sure it is running, reachable and that you have the right context configured.`,
       {
         providerConfig: k8sCtx.provider.config,
         message,
-      },
+      }
     )
   }
 
@@ -168,10 +171,9 @@ export async function deleteNamespaces(namespaces: string[], api: KubeApi, log?:
 
     const now = new Date().getTime()
     if (now - startTime > KUBECTL_DEFAULT_TIMEOUT * 1000) {
-      throw new TimeoutError(
-        `Timed out waiting for namespace ${namespaces.join(", ")} delete to complete`,
-        { namespaces },
-      )
+      throw new TimeoutError(`Timed out waiting for namespace ${namespaces.join(", ")} delete to complete`, {
+        namespaces,
+      })
     }
   }
 }

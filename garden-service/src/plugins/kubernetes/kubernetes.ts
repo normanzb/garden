@@ -32,9 +32,11 @@ import { dedent } from "../../util/string"
 import { kubernetesModuleSpecSchema } from "./kubernetes-module/config"
 import { helmModuleSpecSchema, helmModuleOutputsSchema } from "./helm/config"
 
-export async function configureProvider(
-  { projectName, projectRoot, config }: ConfigureProviderParams<KubernetesConfig>,
-) {
+export async function configureProvider({
+  projectName,
+  projectRoot,
+  config,
+}: ConfigureProviderParams<KubernetesConfig>) {
   config._systemServices = []
 
   if (!config.namespace) {
@@ -65,12 +67,10 @@ export async function configureProvider(
     if (!config.storage.sync.storageClass) {
       config._systemServices.push("nfs-provisioner")
     }
-
   } else if (config.name !== "local-kubernetes" && !config.deploymentRegistry) {
-    throw new ConfigurationError(
-      `kubernetes: must specify deploymentRegistry in config if using local build mode`,
-      { config },
-    )
+    throw new ConfigurationError(`kubernetes: must specify deploymentRegistry in config if using local build mode`, {
+      config,
+    })
   }
 
   if (config.kubeconfig) {
@@ -108,28 +108,22 @@ export async function debugInfo({ ctx, log, includeProject }: GetDebugInfoParams
   }
 }
 
-const outputsSchema = joi.object()
-  .keys({
-    "app-namespace": joiIdentifier()
-      .required()
-      .description("The primary namespace used for resource deployments."),
-    "default-hostname": joi.string()
-      .description("The default hostname configured on the provider."),
-    "metadata-namespace": joiIdentifier()
-      .required()
-      .description("The namespace used for Garden metadata."),
-  })
+const outputsSchema = joi.object().keys({
+  "app-namespace": joiIdentifier()
+    .required()
+    .description("The primary namespace used for resource deployments."),
+  "default-hostname": joi.string().description("The default hostname configured on the provider."),
+  "metadata-namespace": joiIdentifier()
+    .required()
+    .description("The namespace used for Garden metadata."),
+})
 
 export const gardenPlugin = createGardenPlugin({
   name: "kubernetes",
   dependencies: ["container"],
   configSchema,
   outputsSchema,
-  commands: [
-    cleanupClusterRegistry,
-    clusterInit,
-    uninstallGardenServices,
-  ],
+  commands: [cleanupClusterRegistry, clusterInit, uninstallGardenServices],
   handlers: {
     configureProvider,
     getEnvironmentStatus,
