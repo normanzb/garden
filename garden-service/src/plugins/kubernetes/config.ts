@@ -261,7 +261,8 @@ export const kubernetesConfigBase = providerConfigBaseSchema
       .description(dedent`
         Defines the strategy for deploying the project services.
         Default is "rolling update" and there is experimental support for "blue/green" deployment.
-        The feature only supports modules of type \`container\`: other types will just deploy using the default strategy.
+        The feature only supports modules of type \`container\`: other types will just deploy using the default
+        strategy.
       `)
       .meta({
         experimental: true,

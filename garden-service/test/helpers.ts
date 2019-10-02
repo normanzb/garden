@@ -17,7 +17,12 @@ import { containerModuleSpecSchema, containerTestSchema, containerTaskSchema } f
 import { testExecModule, buildExecModule, execBuildSpecSchema } from "../src/plugins/exec"
 import { TaskResults } from "../src/task-graph"
 import { joiArray, joi } from "../src/config/common"
-import { PluginActionHandlers, ModuleActionHandlers, createGardenPlugin, RegisterPluginParam } from "../src/types/plugin/plugin"
+import {
+  PluginActionHandlers,
+  ModuleActionHandlers,
+  createGardenPlugin,
+  RegisterPluginParam,
+} from "../src/types/plugin/plugin"
 import { Garden, GardenParams } from "../src/garden"
 import { ModuleConfig } from "../src/config/module"
 import { mapValues, fromPairs } from "lodash"
