@@ -170,7 +170,7 @@ export class ResolveProviderTask extends BaseTask {
 
   private async ensurePrepared(tmpProvider: Provider) {
     const pluginName = tmpProvider.name
-    const actions = await this.garden.getActionHelper()
+    const actions = await this.garden.getActionRouter()
     const ctx = this.garden.getPluginContext(tmpProvider)
 
     this.log.silly(`Getting status for ${pluginName}`)

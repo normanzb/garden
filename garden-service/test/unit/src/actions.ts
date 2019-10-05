@@ -11,7 +11,7 @@ import {
 import { Service, ServiceState } from "../../../src/types/service"
 import { RuntimeContext, prepareRuntimeContext } from "../../../src/runtime-context"
 import { expectError, makeTestGardenA } from "../../helpers"
-import { ActionHelper } from "../../../src/actions"
+import { ActionRouter } from "../../../src/actions"
 import { Garden } from "../../../src/garden"
 import { LogEntry } from "../../../src/logger/log-entry"
 import { Module } from "../../../src/types/module"
@@ -27,10 +27,10 @@ import { defaultProvider } from "../../../src/config/provider"
 
 const now = new Date()
 
-describe("ActionHelper", () => {
+describe("ActionRouter", () => {
   let garden: Garden
   let log: LogEntry
-  let actions: ActionHelper
+  let actions: ActionRouter
   let module: Module
   let service: Service
   let runtimeContext: RuntimeContext
@@ -40,7 +40,7 @@ describe("ActionHelper", () => {
     const plugins = [testPlugin, testPluginB]
     garden = await makeTestGardenA(plugins)
     log = garden.log
-    actions = await garden.getActionHelper()
+    actions = await garden.getActionRouter()
     const graph = await garden.getConfigGraph()
     module = await graph.getModule("module-a")
     service = await graph.getService("service-a")
@@ -385,7 +385,7 @@ describe("ActionHelper", () => {
   describe("getActionHandler", () => {
     it("should return the configured handler for specified action type and plugin name", async () => {
       const gardenA = await makeTestGardenA()
-      const actionsA = await gardenA.getActionHelper()
+      const actionsA = await gardenA.getActionRouter()
       const pluginName = "test-plugin-b"
       const handler = await actionsA.getActionHandler({ actionType: "prepareEnvironment", pluginName })
 
@@ -395,7 +395,7 @@ describe("ActionHelper", () => {
 
     it("should throw if no handler is available", async () => {
       const gardenA = await makeTestGardenA()
-      const actionsA = await gardenA.getActionHelper()
+      const actionsA = await gardenA.getActionRouter()
       const pluginName = "test-plugin-b"
       await expectError(() => actionsA.getActionHandler({ actionType: "cleanupEnvironment", pluginName }), "plugin")
     })
@@ -406,7 +406,7 @@ describe("ActionHelper", () => {
 
     it("should return default handler, if specified and no handler is available", async () => {
       const gardenA = await makeTestGardenA()
-      const actionsA = await gardenA.getActionHelper()
+      const actionsA = await gardenA.getActionRouter()
       const defaultHandler = async () => {
         return { code: 0, output: "" }
       }
@@ -422,7 +422,7 @@ describe("ActionHelper", () => {
 
     it("should throw if no handler is available", async () => {
       const gardenA = await makeTestGardenA()
-      const actionsA = await gardenA.getActionHelper()
+      const actionsA = await gardenA.getActionRouter()
       await expectError(
         () => actionsA.getModuleActionHandler({ actionType: "execInService", moduleType: "container" }),
         "parameter",
@@ -467,7 +467,7 @@ describe("ActionHelper", () => {
           config: projectConfig,
         })
 
-        const _actions = await _garden.getActionHelper()
+        const _actions = await _garden.getActionRouter()
 
         const handler = await _actions.getModuleActionHandler({ actionType: "build", moduleType: "bar" })
 
@@ -528,7 +528,7 @@ describe("ActionHelper", () => {
           config: projectConfig,
         })
 
-        const _actions = await _garden.getActionHelper()
+        const _actions = await _garden.getActionRouter()
 
         const handler = await _actions.getModuleActionHandler({ actionType: "build", moduleType: "bar" })
 
@@ -603,7 +603,7 @@ describe("ActionHelper", () => {
           config: projectConfig,
         })
 
-        const _actions = await _garden.getActionHelper()
+        const _actions = await _garden.getActionRouter()
 
         const handler = await _actions.getModuleActionHandler({ actionType: "build", moduleType: "bar" })
 
@@ -677,7 +677,7 @@ describe("ActionHelper", () => {
             config: projectConfig,
           })
 
-          const _actions = await _garden.getActionHelper()
+          const _actions = await _garden.getActionRouter()
 
           const handler = await _actions.getModuleActionHandler({ actionType: "build", moduleType: "bar" })
 
@@ -738,7 +738,7 @@ describe("ActionHelper", () => {
           config: projectConfig,
         })
 
-        const _actions = await _garden.getActionHelper()
+        const _actions = await _garden.getActionRouter()
 
         const handler = await _actions.getModuleActionHandler({ actionType: "build", moduleType: "bar" })
 
@@ -751,7 +751,7 @@ describe("ActionHelper", () => {
 
   describe("callActionHandler", () => {
     it("should call the handler with a super argument if the handler is overriding another", async () => {
-      const emptyActions = new ActionHelper(garden, [], [])
+      const emptyActions = new ActionRouter(garden, [], [])
 
       const _super = async () => {
         return { ready: true, outputs: {} }
@@ -778,7 +778,7 @@ describe("ActionHelper", () => {
 
   describe("callModuleHandler", () => {
     it("should call the handler with a super argument if the handler is overriding another", async () => {
-      const emptyActions = new ActionHelper(garden, [], [])
+      const emptyActions = new ActionRouter(garden, [], [])
 
       const graph = await garden.getConfigGraph()
       const moduleA = await graph.getModule("module-a")
@@ -807,7 +807,7 @@ describe("ActionHelper", () => {
 
   describe("callServiceHandler", () => {
     it("should call the handler with a super argument if the handler is overriding another", async () => {
-      const emptyActions = new ActionHelper(garden, [], [])
+      const emptyActions = new ActionRouter(garden, [], [])
 
       const graph = await garden.getConfigGraph()
       const serviceA = await graph.getService("service-a")
@@ -837,7 +837,7 @@ describe("ActionHelper", () => {
     })
 
     it("should interpolate runtime template strings", async () => {
-      const emptyActions = new ActionHelper(garden, [], [])
+      const emptyActions = new ActionRouter(garden, [], [])
 
       garden["moduleConfigs"]["module-a"].spec.foo = "\${runtime.services.service-b.outputs.foo}"
 
@@ -883,7 +883,7 @@ describe("ActionHelper", () => {
     })
 
     it("should throw if one or more runtime variables remain unresolved after re-resolution", async () => {
-      const emptyActions = new ActionHelper(garden, [], [])
+      const emptyActions = new ActionRouter(garden, [], [])
 
       garden["moduleConfigs"]["module-a"].spec.services[0].foo = "\${runtime.services.service-b.outputs.foo}"
 
@@ -928,7 +928,7 @@ describe("ActionHelper", () => {
 
   describe("callTaskHandler", () => {
     it("should call the handler with a super argument if the handler is overriding another", async () => {
-      const emptyActions = new ActionHelper(garden, [], [])
+      const emptyActions = new ActionRouter(garden, [], [])
 
       const graph = await garden.getConfigGraph()
       const taskA = await graph.getTask("task-a")
@@ -978,7 +978,7 @@ describe("ActionHelper", () => {
     })
 
     it("should interpolate runtime template strings", async () => {
-      const emptyActions = new ActionHelper(garden, [], [])
+      const emptyActions = new ActionRouter(garden, [], [])
 
       garden["moduleConfigs"]["module-a"].spec.tasks[0].foo = "\${runtime.services.service-b.outputs.foo}"
 
@@ -1034,7 +1034,7 @@ describe("ActionHelper", () => {
     })
 
     it("should throw if one or more runtime variables remain unresolved after re-resolution", async () => {
-      const emptyActions = new ActionHelper(garden, [], [])
+      const emptyActions = new ActionRouter(garden, [], [])
 
       garden["moduleConfigs"]["module-a"].spec.tasks[0].foo = "\${runtime.services.service-b.outputs.foo}"
 
