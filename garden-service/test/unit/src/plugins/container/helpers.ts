@@ -78,7 +78,7 @@ describe("containerHelpers", () => {
   async function getTestModule(moduleConfig: ContainerModuleConfig) {
     const parsed = await configure({ ctx, moduleConfig, log })
     const graph = await garden.getConfigGraph()
-    return moduleFromConfig(garden, graph, parsed)
+    return moduleFromConfig(garden, graph, parsed.moduleConfig)
   }
 
   describe("getLocalImageId", () => {

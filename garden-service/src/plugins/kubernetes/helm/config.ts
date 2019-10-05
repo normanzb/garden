@@ -327,8 +327,8 @@ export async function validateHelmModule({ moduleConfig }: ConfigureModuleParams
   })
 
   moduleConfig.outputs = {
-    "release-name": await getReleaseName(moduleConfig),
+    "release-name": getReleaseName(moduleConfig),
   }
 
-  return moduleConfig
+  return { moduleConfig }
 }

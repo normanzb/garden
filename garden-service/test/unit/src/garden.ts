@@ -498,7 +498,7 @@ describe("Garden", () => {
               docs: "foo",
               schema: joi.object(),
               handlers: {
-                configure: async ({ moduleConfig }) => moduleConfig,
+                configure: async ({ moduleConfig }) => ({ moduleConfig }),
                 build: async () => ({}),
               },
             },
@@ -542,7 +542,7 @@ describe("Garden", () => {
               docs: "foo",
               schema: joi.object(),
               handlers: {
-                configure: async ({ moduleConfig }) => moduleConfig,
+                configure: async ({ moduleConfig }) => ({ moduleConfig }),
                 build: async () => ({}),
               },
             },
@@ -858,7 +858,7 @@ describe("Garden", () => {
                 docs: "foo",
                 schema: joi.object(),
                 handlers: {
-                  configure: async ({ moduleConfig }) => moduleConfig,
+                  configure: async ({ moduleConfig }) => ({ moduleConfig }),
                   build: async () => ({}),
                 },
               },
@@ -902,7 +902,7 @@ describe("Garden", () => {
                 docs: "foo",
                 schema: joi.object(),
                 handlers: {
-                  configure: async ({ moduleConfig }) => moduleConfig,
+                  configure: async ({ moduleConfig }) => ({ moduleConfig }),
                   build: async () => ({}),
                 },
               },
@@ -1168,7 +1168,7 @@ describe("Garden", () => {
           schema: joi.object(),
           handlers: {
             configure: async ({ moduleConfig }) => {
-              return moduleConfig
+              return { moduleConfig }
             },
           },
         }],

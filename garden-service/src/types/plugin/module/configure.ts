@@ -14,18 +14,22 @@ import { logEntrySchema } from "../base"
 import { baseModuleSpecSchema, ModuleConfig, moduleConfigSchema } from "../../../config/module"
 import { joi } from "../../../config/common"
 
+// Note: This is the only module handler that doesn't inherit from a base
 export interface ConfigureModuleParams<T extends Module = Module> {
   ctx: PluginContext
   log: LogEntry
   moduleConfig: T["_ConfigType"]
+  super?: ConfigureModuleParams<T>
 }
 
-export type ConfigureModuleResult<T extends Module = Module> = ModuleConfig<
-  T["spec"],
-  T["serviceConfigs"][0]["spec"],
-  T["testConfigs"][0]["spec"],
-  T["taskConfigs"][0]["spec"]
->
+export interface ConfigureModuleResult<T extends Module = Module> {
+  moduleConfig: ModuleConfig<
+    T["spec"],
+    T["serviceConfigs"][0]["spec"],
+    T["testConfigs"][0]["spec"],
+    T["taskConfigs"][0]["spec"]
+  >
+}
 
 export const configure = {
   description: dedent`
@@ -52,5 +56,8 @@ export const configure = {
         .required(),
     }),
 
-  resultSchema: moduleConfigSchema,
+  resultSchema: joi.object()
+    .keys({
+      moduleConfig: moduleConfigSchema,
+    }),
 }

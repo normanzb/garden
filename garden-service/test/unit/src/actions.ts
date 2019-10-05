@@ -439,7 +439,7 @@ describe("ActionRouter", () => {
               docs: "bar",
               schema: joi.object(),
               handlers: {
-                configure: async ({ moduleConfig }) => moduleConfig,
+                configure: async ({ moduleConfig }) => ({ moduleConfig }),
                 build: async () => ({}),
               },
             },
@@ -504,7 +504,7 @@ describe("ActionRouter", () => {
               docs: "bar",
               schema: joi.object(),
               handlers: {
-                configure: async ({ moduleConfig }) => moduleConfig,
+                configure: async ({ moduleConfig }) => ({ moduleConfig }),
                 build: async () => ({}),
               },
             },
@@ -567,7 +567,7 @@ describe("ActionRouter", () => {
               docs: "bar",
               schema: joi.object(),
               handlers: {
-                configure: async ({ moduleConfig }) => moduleConfig,
+                configure: async ({ moduleConfig }) => ({ moduleConfig }),
                 build: async () => ({}),
               },
             },
@@ -641,7 +641,7 @@ describe("ActionRouter", () => {
                 docs: "bar",
                 schema: joi.object(),
                 handlers: {
-                  configure: async ({ moduleConfig }) => moduleConfig,
+                  configure: async ({ moduleConfig }) => ({ moduleConfig }),
                   build: async () => ({}),
                 },
               },
@@ -715,7 +715,7 @@ describe("ActionRouter", () => {
               docs: "bar",
               schema: joi.object(),
               handlers: {
-                configure: async ({ moduleConfig }) => moduleConfig,
+                configure: async ({ moduleConfig }) => ({ moduleConfig }),
               },
             },
           ],
@@ -1145,9 +1145,11 @@ const testPlugin = createGardenPlugin({
         }))
 
         return {
-          ...params.moduleConfig,
-          serviceConfigs,
-          taskConfigs,
+          moduleConfig: {
+            ...params.moduleConfig,
+            serviceConfigs,
+            taskConfigs,
+          },
         }
       },
 

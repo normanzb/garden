@@ -902,11 +902,13 @@ export class Garden {
         configureHandler.pluginName,
       )
       const ctx = this.getPluginContext(provider)
-      config = await configureHandler({
+      const configureResult = await configureHandler({
         ctx,
         moduleConfig: config,
         log: this.log,
       })
+
+      config = configureResult.moduleConfig
 
       // FIXME: We should be able to avoid this
       config.name = getModuleKey(config.name, config.plugin)

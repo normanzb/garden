@@ -169,7 +169,7 @@ export async function configureModule(
     endpoint: await getInternalServiceUrl(<OpenFaasPluginContext>ctx, log, moduleConfig),
   }
 
-  return moduleConfig
+  return ({ moduleConfig })
 }
 
 async function getInternalGatewayUrl(ctx: PluginContext<OpenFaasConfig>, log: LogEntry) {

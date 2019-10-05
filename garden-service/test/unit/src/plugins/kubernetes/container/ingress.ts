@@ -380,7 +380,7 @@ describe("createIngressResources", () => {
     const ctx = garden.getPluginContext(provider)
     const parsed = await configure({ ctx, moduleConfig, log: garden.log })
     const graph = await garden.getConfigGraph()
-    const module = await moduleFromConfig(garden, graph, parsed)
+    const module = await moduleFromConfig(garden, graph, parsed.moduleConfig)
 
     return {
       name: spec.name,
