@@ -112,29 +112,28 @@ export class ResolveProviderTask extends BaseTask {
     resolvedConfig = validateConfig(resolvedConfig)
     resolvedConfig.path = this.garden.projectRoot
 
-    const configureHandler = (this.plugin.handlers || {}).configureProvider
-
     let moduleConfigs: ModuleConfig[] = []
 
-    if (configureHandler) {
-      this.log.silly(`Calling configureProvider on ${providerName}`)
+    this.log.silly(`Calling configureProvider on ${providerName}`)
 
-      const configureOutput = await configureHandler({
-        log: this.log,
-        config: resolvedConfig,
-        configStore: this.garden.configStore,
-        projectName: this.garden.projectName,
-        projectRoot: this.garden.projectRoot,
-        dependencies: resolvedProviders,
-      })
+    const actions = await this.garden.getActionRouter()
 
-      this.log.silly(`Validating ${providerName} config returned from configureProvider handler`)
-      resolvedConfig = validateConfig(configureOutput.config)
-      resolvedConfig.path = this.garden.projectRoot
+    const configureOutput = await actions.configureProvider({
+      pluginName: providerName,
+      log: this.log,
+      config: resolvedConfig,
+      configStore: this.garden.configStore,
+      projectName: this.garden.projectName,
+      projectRoot: this.garden.projectRoot,
+      dependencies: resolvedProviders,
+    })
 
-      if (configureOutput.moduleConfigs) {
-        moduleConfigs = configureOutput.moduleConfigs
-      }
+    this.log.silly(`Validating ${providerName} config returned from configureProvider handler`)
+    resolvedConfig = validateConfig(configureOutput.config)
+    resolvedConfig.path = this.garden.projectRoot
+
+    if (configureOutput.moduleConfigs) {
+      moduleConfigs = configureOutput.moduleConfigs
     }
 
     // Validating the output config against the base plugins. This is important to make sure base handlers are

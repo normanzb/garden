@@ -41,25 +41,51 @@ import { pluginCommandSchema, PluginCommand } from "./command"
 import { getPortForward, GetPortForwardParams, GetPortForwardResult } from "./service/getPortForward"
 import { StopPortForwardParams, stopPortForward } from "./service/stopPortForward"
 
-export interface ActionHandler<P extends {}, O extends {}> {
+export interface ActionHandlerParamsBase {
+  base?: ActionHandler<any, any>
+}
+
+export interface ActionHandler<P extends ActionHandlerParamsBase, O extends {}> {
   (params: P): O
-  super?: ActionHandler<P, O>
+  base?: WrappedActionHandler<P, O>
 }
 
-export type ServiceActionHandlers<T extends Module = Module> = {
-  [P in keyof ServiceActionParams<T>]: ActionHandler<ServiceActionParams<T>[P], ServiceActionOutputs[P]>
+export interface ModuleActionHandler<P extends ActionHandlerParamsBase, O extends {}> {
+  (params: P): O
+  base?: WrappedModuleActionHandler<P, O>
 }
 
-export type TaskActionHandlers<T extends Module = Module> = {
-  [P in keyof TaskActionParams<T>]: ActionHandler<TaskActionParams<T>[P], TaskActionOutputs[P]>
+export interface WrappedActionHandler<P extends ActionHandlerParamsBase, O extends object> extends ActionHandler<P, O> {
+  actionType: string
+  pluginName: string
+}
+
+export interface WrappedModuleActionHandler<P extends ActionHandlerParamsBase, O extends object>
+  extends WrappedActionHandler<P, O> {
+  moduleType: string
+  base?: WrappedModuleActionHandler<P, O>
+}
+
+export type PluginActionHandlers = {
+  [P in keyof PluginActionParams]: ActionHandler<PluginActionParams[P], PluginActionOutputs[P]>
 }
 
 export type ModuleActionHandlers<T extends Module = Module> = {
-  [P in keyof ModuleActionParams<T>]: ActionHandler<ModuleActionParams<T>[P], ModuleActionOutputs[P]>
+  [P in keyof ModuleActionParams<T>]: ModuleActionHandler<ModuleActionParams<T>[P], ModuleActionOutputs[P]>
+}
+
+export type ServiceActionHandlers<T extends Module = Module> = {
+  [P in keyof ServiceActionParams<T>]: ModuleActionHandler<ServiceActionParams<T>[P], ServiceActionOutputs[P]>
+}
+
+export type TaskActionHandlers<T extends Module = Module> = {
+  [P in keyof TaskActionParams<T>]: ModuleActionHandler<TaskActionParams<T>[P], TaskActionOutputs[P]>
 }
 
 export type ModuleAndRuntimeActionHandlers<T extends Module = Module> =
   ModuleActionHandlers<T> & ServiceActionHandlers<T> & TaskActionHandlers<T>
+
+export type AllActionHandlers<T extends Module = Module> = PluginActionHandlers & ModuleAndRuntimeActionHandlers<T>
 
 export type PluginActionName = keyof PluginActionHandlers
 export type ServiceActionName = keyof ServiceActionHandlers
@@ -101,10 +127,6 @@ export interface PluginActionOutputs {
   getDebugInfo: Promise<DebugInfo>
 }
 
-export type PluginActionHandlers = {
-  [P in keyof PluginActionParams]: ActionHandler<PluginActionParams[P], PluginActionOutputs[P]>
-}
-
 const _pluginActionDescriptions: { [P in PluginActionName]: PluginActionDescription } = {
   configureProvider,
   getEnvironmentStatus,
@@ -119,7 +141,7 @@ const _pluginActionDescriptions: { [P in PluginActionName]: PluginActionDescript
 }
 
 // No way currently to further validate the shape of the super function
-const superSchema = joi.func().arity(1)
+const baseHandlerSchema = joi.func().arity(1)
   .description(
     "When a handler is overriding a handler from a base plugin, this is provided to call the base handler. " +
     "This accepts the same parameters as the handler calling it.",
@@ -128,7 +150,7 @@ const superSchema = joi.func().arity(1)
 export const pluginActionDescriptions = mapValues(_pluginActionDescriptions, desc => ({
   ...desc,
   paramsSchema: desc.paramsSchema.keys({
-    super: superSchema,
+    base: baseHandlerSchema,
   }),
 }))
 
@@ -144,9 +166,11 @@ interface _ServiceActionParams<T extends Module = Module> {
   stopPortForward: StopPortForwardParams<T>
 }
 
-// Add super parameter
+// Specify base parameter more precisely than the base schema
 export type ServiceActionParams<T extends Module = Module> = {
-  [P in keyof _ServiceActionParams<T>]: _ServiceActionParams<T>[P] & { super?: _ServiceActionParams<T>[P] }
+  [P in keyof _ServiceActionParams<T>]:
+  _ServiceActionParams<T>[P]
+  & { base?: WrappedModuleActionHandler<_ServiceActionParams<T>[P], ServiceActionOutputs[P]> }
 }
 
 export interface ServiceActionOutputs {
@@ -178,9 +202,11 @@ interface _TaskActionParams<T extends Module = Module> {
   runTask: RunTaskParams<T>
 }
 
-// Add super parameter
+// Specify base parameter more precisely than the base schema
 export type TaskActionParams<T extends Module = Module> = {
-  [P in keyof _TaskActionParams<T>]: _TaskActionParams<T>[P] & { super?: _TaskActionParams<T>[P] }
+  [P in keyof _TaskActionParams<T>]:
+  _TaskActionParams<T>[P]
+  & { base?: WrappedModuleActionHandler<_TaskActionParams<T>[P], TaskActionOutputs[P]> }
 }
 
 export interface TaskActionOutputs {
@@ -203,9 +229,11 @@ interface _ModuleActionParams<T extends Module = Module> {
   getTestResult: GetTestResultParams<T>
 }
 
-// Add super parameter
+// Specify base parameter more precisely than the base schema
 export type ModuleActionParams<T extends Module = Module> = {
-  [P in keyof _ModuleActionParams<T>]: _ModuleActionParams<T>[P] & { super?: _ModuleActionParams<T>[P] }
+  [P in keyof _ModuleActionParams<T>]:
+  _ModuleActionParams<T>[P]
+  & { base?: WrappedModuleActionHandler<_ModuleActionParams<T>[P], ModuleActionOutputs[P]> }
 }
 
 export interface ModuleActionOutputs extends ServiceActionOutputs {
@@ -235,7 +263,7 @@ const _moduleActionDescriptions:
 export const moduleActionDescriptions = mapValues(_moduleActionDescriptions, desc => ({
   ...desc,
   paramsSchema: desc.paramsSchema.keys({
-    super: superSchema,
+    base: baseHandlerSchema,
   }),
 }))
 
@@ -390,8 +418,8 @@ export const pluginSchema = joi.object()
         A map of plugin action handlers provided by the plugin.
 
         If you specify a \`base\`, you can use this field to add new handlers or override the handlers from the base
-        plugin. Any handlers you override will receive a \`super\` parameter, so that you can optionally call the
-        original handler from the base plugin.
+        plugin. Any handlers you override will receive a \`base\` parameter with the overridden handler, so that you
+        can optionally call the original handler from the base plugin.
       `),
 
     commands: joi.array().items(pluginCommandSchema)
@@ -401,8 +429,8 @@ export const pluginSchema = joi.object()
 
         If you specify a \`base\`, new commands are added in addition to the commands of the base plugin, and if you
         specify a command with the same name as one in the base plugin, you can override the original.
-        Any command you override will receive a \`super\` parameter, so that you can optionally call the original
-        command from the base plugin.
+        Any command you override will receive a \`base\` parameter with the overridden handler, so that you can
+        optionally call the original command from the base plugin.
       `),
 
     createModuleTypes: joi.array().items(createModuleTypeSchema)

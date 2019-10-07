@@ -243,6 +243,75 @@ describe("Garden", () => {
   })
 
   describe("getPlugins", () => {
+    const path = process.cwd()
+    const projectConfig: ProjectConfig = {
+      apiVersion: DEFAULT_API_VERSION,
+      kind: "Project",
+      name: "test",
+      path,
+      defaultEnvironment: "default",
+      dotIgnoreFiles: [],
+      environments: [
+        { name: "default", variables: {} },
+      ],
+      providers: [
+        { name: "foo" },
+      ],
+      variables: {},
+    }
+
+    it("should attach base from createModuleTypes when overriding a handler via extendModuleTypes", async () => {
+      const base: GardenPlugin = {
+        name: "base",
+        createModuleTypes: [
+          {
+            name: "foo",
+            docs: "foo",
+            schema: joi.object(),
+            handlers: {
+              configure: async ({ moduleConfig }) => ({ moduleConfig }),
+              build: async () => ({}),
+            },
+          },
+        ],
+      }
+      const foo: GardenPlugin = {
+        name: "foo",
+        dependencies: ["base"],
+        extendModuleTypes: [
+          {
+            name: "foo",
+            handlers: {
+              build: async () => ({}),
+            },
+          },
+        ],
+      }
+
+      const garden = await Garden.factory(path, {
+        plugins: [base, foo],
+        config: {
+          ...projectConfig,
+          providers: [
+            ...projectConfig.providers,
+            { name: "base" },
+          ],
+        },
+      })
+
+      const parsed = await garden.getPlugin("foo")
+      const extended = findByName(parsed.extendModuleTypes || [], "foo")!
+
+      expect(extended).to.exist
+      expect(extended.name).to.equal("foo")
+      expect(extended.handlers.build).to.exist
+      expect(extended.handlers.build!.base).to.exist
+      expect(extended.handlers.build!.base!.actionType).to.equal("build")
+      expect(extended.handlers.build!.base!.moduleType).to.equal("foo")
+      expect(extended.handlers.build!.base!.pluginName).to.equal("base")
+      expect(extended.handlers.build!.base!.base).to.not.exist
+    })
+
     it("should throw if multiple plugins declare the same module type", async () => {
       const testPluginDupe = {
         ...testPlugin,
@@ -313,23 +382,6 @@ describe("Garden", () => {
     })
 
     context("when a plugin has a base defined", () => {
-      const path = process.cwd()
-      const projectConfig: ProjectConfig = {
-        apiVersion: DEFAULT_API_VERSION,
-        kind: "Project",
-        name: "test",
-        path,
-        defaultEnvironment: "default",
-        dotIgnoreFiles: [],
-        environments: [
-          { name: "default", variables: {} },
-        ],
-        providers: [
-          { name: "foo" },
-        ],
-        variables: {},
-      }
-
       it("should add and deduplicate declared dependencies on top of the dependencies of the base", async () => {
         const base = {
           name: "base",
@@ -351,7 +403,7 @@ describe("Garden", () => {
         expect(parsed.dependencies).to.eql(["test-plugin", "test-plugin-b", "test-plugin-c"])
       })
 
-      it("should combine handlers from both plugins and attach a super to the handler when overriding", async () => {
+      it("should combine handlers from both plugins and attach base to the handler when overriding", async () => {
         const base = {
           name: "base",
           handlers: {
@@ -375,11 +427,13 @@ describe("Garden", () => {
         const parsed = await garden.getPlugin("foo")
 
         expect(parsed.handlers!.getEnvironmentStatus).to.equal(base.handlers.getEnvironmentStatus)
-        expect(parsed.handlers!.configureProvider!.super).to.equal(base.handlers.configureProvider)
-        expect(parsed.handlers!.configureProvider!.super!.super).to.be.undefined
+        expect(parsed.handlers!.configureProvider!.base).to.equal(base.handlers.configureProvider)
+        expect(parsed.handlers!.configureProvider!.base!.actionType).to.equal("configureProvider")
+        expect(parsed.handlers!.configureProvider!.base!.pluginName).to.equal("base")
+        expect(parsed.handlers!.configureProvider!.base!.base).to.be.undefined
       })
 
-      it("should combine commands from both plugins and attach a super to the handler when overriding", async () => {
+      it("should combine commands from both plugins and attach base handler when overriding", async () => {
         const base = {
           name: "base",
           commands: [
@@ -417,7 +471,7 @@ describe("Garden", () => {
         expect(parsed.commands!.length).to.equal(2)
         expect(findByName(parsed.commands!, "foo")).to.eql({
           ...foo.commands[0],
-          super: base.commands[0],
+          base: base.commands[0],
         })
         expect(findByName(parsed.commands!, "bar")).to.eql(foo.commands[1])
       })
@@ -650,7 +704,7 @@ describe("Garden", () => {
           expect(parsed.dependencies).to.eql(["test-plugin", "test-plugin-b", "test-plugin-c"])
         })
 
-        it("should combine handlers from both plugins and recursively attach super handlers", async () => {
+        it("should combine handlers from both plugins and recursively attach base handlers", async () => {
           const baseA = {
             name: "base-a",
             handlers: {
@@ -681,12 +735,12 @@ describe("Garden", () => {
           const parsed = await garden.getPlugin("foo")
 
           expect(parsed.handlers!.getEnvironmentStatus).to.equal(baseA.handlers.getEnvironmentStatus)
-          expect(parsed.handlers!.configureProvider!.super).to.equal(baseB.handlers.configureProvider)
-          expect(parsed.handlers!.configureProvider!.super!.super).to.equal(baseA.handlers.configureProvider)
-          expect(parsed.handlers!.configureProvider!.super!.super!.super).to.be.undefined
+          expect(parsed.handlers!.configureProvider!.base).to.equal(baseB.handlers.configureProvider)
+          expect(parsed.handlers!.configureProvider!.base!.base).to.equal(baseA.handlers.configureProvider)
+          expect(parsed.handlers!.configureProvider!.base!.base!.base).to.be.undefined
         })
 
-        it("should combine commands from all plugins and recursively attach supers when overriding", async () => {
+        it("should combine commands from all plugins and recursively set base handlers when overriding", async () => {
           const baseA = {
             name: "base-a",
             commands: [
@@ -744,17 +798,17 @@ describe("Garden", () => {
 
           expect(fooCommand).to.exist
           expect(fooCommand.handler).to.equal(foo.commands[0].handler)
-          expect(fooCommand.super).to.exist
-          expect(fooCommand.super!.handler).to.equal(baseB.commands[0].handler)
-          expect(fooCommand.super!.super).to.exist
-          expect(fooCommand.super!.super!.handler).to.equal(baseA.commands[0].handler)
-          expect(fooCommand.super!.super!.super).to.be.undefined
+          expect(fooCommand.base).to.exist
+          expect(fooCommand.base!.handler).to.equal(baseB.commands[0].handler)
+          expect(fooCommand.base!.base).to.exist
+          expect(fooCommand.base!.base!.handler).to.equal(baseA.commands[0].handler)
+          expect(fooCommand.base!.base!.base).to.be.undefined
 
           expect(barCommand).to.exist
           expect(barCommand!.handler).to.equal(foo.commands[1].handler)
-          expect(barCommand!.super).to.exist
-          expect(barCommand!.super!.handler).to.equal(baseB.commands[1].handler)
-          expect(barCommand!.super!.super).to.be.undefined
+          expect(barCommand!.base).to.exist
+          expect(barCommand!.base!.handler).to.equal(baseB.commands[1].handler)
+          expect(barCommand!.base!.base).to.be.undefined
         })
 
         it("should combine defined module types from all plugins", async () => {
@@ -953,7 +1007,10 @@ describe("Garden", () => {
           expect(fooExtension).to.exist
           expect(fooExtension.handlers.build).to.exist
           expect(fooExtension.handlers.getBuildStatus).to.exist
-          expect(fooExtension.handlers.build!.super).to.equal(baseB.extendModuleTypes![0].handlers!.build)
+          expect(fooExtension.handlers.build!.base).to.exist
+          expect(fooExtension.handlers.build!.base!.actionType).to.equal("build")
+          expect(fooExtension.handlers.build!.base!.moduleType).to.equal("foo")
+          expect(fooExtension.handlers.build!.base!.pluginName).to.equal("foo")
         })
 
         it("should throw if plugins have circular bases", async () => {
@@ -1037,25 +1094,11 @@ describe("Garden", () => {
     })
 
     it("should call a configureProvider handler if applicable", async () => {
-      const test = createGardenPlugin({
-        name: "test",
-        handlers: {
-          async configureProvider({ config }: ConfigureProviderParams) {
-            expect(config).to.eql({
-              name: "test",
-              path: projectRootA,
-              foo: "bar",
-            })
-            return { config: { ...config, foo: "bla" } }
-          },
-        },
-      })
-
       const projectConfig: ProjectConfig = {
         apiVersion: "garden.io/v0",
         kind: "Project",
         name: "test",
-        path: projectRootA,
+        path: process.cwd(),
         defaultEnvironment: "default",
         dotIgnoreFiles: defaultDotIgnoreFiles,
         environments: [
@@ -1067,12 +1110,30 @@ describe("Garden", () => {
         variables: {},
       }
 
-      const garden = await TestGarden.factory(projectRootA, { config: projectConfig, plugins: [test] })
+      const test = createGardenPlugin({
+        name: "test",
+        handlers: {
+          async configureProvider({ config }: ConfigureProviderParams) {
+            expect(config).to.eql({
+              name: "test",
+              path: projectConfig.path,
+              foo: "bar",
+            })
+            return { config: { ...config, foo: "bla" } }
+          },
+        },
+      })
+
+      const garden = await Garden.factory(projectConfig.path, {
+        plugins: [test],
+        config: projectConfig,
+      })
+
       const provider = await garden.resolveProvider("test")
 
       expect(provider.config).to.eql({
         name: "test",
-        path: projectRootA,
+        path: projectConfig.path,
         foo: "bla",
       })
     })

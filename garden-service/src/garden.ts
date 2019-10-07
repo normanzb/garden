@@ -6,7 +6,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/.
  */
 
-import Bluebird = require("bluebird")
+import Bluebird from "bluebird"
 import { parse, relative, resolve, dirname } from "path"
 import { flatten, isString, cloneDeep, sortBy, fromPairs, keyBy, uniq } from "lodash"
 const AsyncLock = require("async-lock")
@@ -14,7 +14,7 @@ const AsyncLock = require("async-lock")
 import { TreeCache } from "./cache"
 import { builtinPlugins } from "./plugins/plugins"
 import { Module, getModuleCacheContext, getModuleKey, ModuleConfigMap } from "./types/module"
-import { pluginModuleSchema, pluginSchema } from "./types/plugin/plugin"
+import { pluginModuleSchema, pluginSchema, ModuleTypeDefinition, ModuleTypeExtension } from "./types/plugin/plugin"
 import { SourceConfig, ProjectConfig, resolveProjectConfig, pickEnvironment } from "./config/project"
 import { findByName, pickKeys, getPackageVersion, pushToKey, getNames } from "./util/util"
 import { ConfigurationError, PluginError, RuntimeError } from "./exceptions"
@@ -453,7 +453,7 @@ export class Garden {
 
       // Takes a plugin and resolves it against its base plugin, if applicable
       // TODO: split this out of this method
-      const resolvePlugin = (plugin: GardenPlugin) => {
+      const resolvePlugin = (plugin: GardenPlugin): GardenPlugin => {
         if (!plugin.base) {
           return plugin
         }
@@ -493,7 +493,8 @@ export class Garden {
           if (!handler) {
             continue
           } else if (resolved.handlers[name]) {
-            resolved.handlers[name].super = handler
+            // Attach the overridden handler as a base, and attach metadata
+            resolved.handlers[name].base = Object.assign(handler, { actionType: name, pluginName: base.name })
           } else {
             resolved.handlers[name] = handler
           }
@@ -505,7 +506,7 @@ export class Garden {
         for (const baseCommand of base.commands || []) {
           const command = findByName(resolved.commands, baseCommand.name)
           if (command) {
-            command.super = baseCommand
+            command.base = baseCommand
           } else {
             resolved.commands.push(baseCommand)
           }
@@ -528,16 +529,15 @@ export class Garden {
         }
 
         if (!baseIsConfigured) {
+          // Base is not explicitly configured, so we coalesce the module type extensions
           for (const baseSpec of base.extendModuleTypes || []) {
             const spec = findByName(plugin.extendModuleTypes || [], baseSpec.name)
             if (spec) {
               // Both plugin and base extend the module type, coalesce them
               for (const [name, baseHandler] of Object.entries(baseSpec.handlers)) {
-                // Attach super to the handler if both plugin and base specify it, otherwise pull in the base handler
-                if (spec.handlers[name]) {
-                  spec.handlers[name].super = baseHandler
-                } else {
-                  spec.handlers[name] = baseHandler
+                // Pull in handler from base, if it's not specified in the plugin
+                if (!spec.handlers[name]) {
+                  spec.handlers[name] = cloneDeep(baseHandler)
                 }
               }
             } else {
@@ -550,42 +550,51 @@ export class Garden {
         return resolved
       }
 
-      const moduleDeclarations: { [moduleType: string]: GardenPlugin[] } = {}
-      const moduleExtensions: { [moduleType: string]: GardenPlugin[] } = {}
+      const moduleDeclarations: { [moduleType: string]: { plugin: GardenPlugin, spec: ModuleTypeDefinition }[] } = {}
+      const moduleExtensions: { [moduleType: string]: { plugin: GardenPlugin, spec: ModuleTypeExtension }[] } = {}
 
       for (const plugin of Object.values(configuredPlugins)) {
         const resolved = resolvePlugin(plugin)
 
+        // Note: We clone the specs to avoid possible circular references
+        // (plugin authors may re-use handlers for various reasons).
         for (const spec of resolved.createModuleTypes || []) {
-          pushToKey(moduleDeclarations, spec.name, resolved)
+          pushToKey(moduleDeclarations, spec.name, {
+            plugin: resolved,
+            spec: cloneDeep(spec),
+          })
         }
 
         for (const spec of resolved.extendModuleTypes || []) {
-          pushToKey(moduleExtensions, spec.name, resolved)
+          pushToKey(moduleExtensions, spec.name, {
+            plugin: resolved,
+            spec: cloneDeep(spec),
+          })
         }
 
         loadedPlugins[plugin.name] = configuredPlugins[plugin.name] = resolved
       }
 
-      // Make sure only one plugin declares each module type
-      for (const [moduleType, plugins] of Object.entries(moduleDeclarations)) {
-        if (plugins.length > 1) {
+      for (const [moduleType, declarations] of Object.entries(moduleDeclarations)) {
+        // Make sure only one plugin declares each module type
+        if (declarations.length > 1) {
+          const plugins = declarations.map(d => d.plugin.name)
+
           throw new ConfigurationError(
-            `Module type '${moduleType}' is declared in multiple providers: ${plugins
-              .map(p => p.name)
-              .join(", ")}.`,
-            { moduleType, plugins: plugins.map(p => p.name) },
+            `Module type '${moduleType}' is declared in multiple providers: ${plugins.join(", ")}.`,
+            { moduleType, plugins },
           )
         }
       }
 
-      // Make sure plugins that extend module types correctly declare their dependencies
-      for (const [moduleType, plugins] of Object.entries(moduleExtensions)) {
-        const declaredBy =
-          moduleDeclarations[moduleType] && moduleDeclarations[moduleType][0]
+      for (const [moduleType, extensions] of Object.entries(moduleExtensions)) {
+        // We validate above that there is only one declaration per module type
+        const declaration = moduleDeclarations[moduleType] && moduleDeclarations[moduleType][0]
+        const declaredBy = declaration && declaration.plugin.name
 
-        for (const plugin of plugins) {
-          if (!declaredBy) {
+        for (const { plugin, spec } of extensions) {
+          // Make sure plugins that extend module types correctly declare their dependencies
+          if (!declaration) {
             throw new PluginError(
               deline`
               Plugin '${plugin.name}' extends module type '${moduleType}' but the module type has not been declared.
@@ -599,23 +608,37 @@ export class Garden {
           const bases = getPluginBaseNames(plugin.name, loadedPlugins)
 
           if (
-            declaredBy.name !== plugin.name &&
-            !bases.includes(declaredBy.name) &&
-            !(plugin.dependencies && plugin.dependencies.includes(declaredBy.name))
+            declaredBy !== plugin.name &&
+            !bases.includes(declaredBy) &&
+            !(plugin.dependencies && plugin.dependencies.includes(declaredBy))
           ) {
             throw new PluginError(
               deline`
-              Plugin '${plugin.name}' extends module type '${moduleType}', declared by the '${declaredBy.name}' plugin,
+              Plugin '${plugin.name}' extends module type '${moduleType}', declared by the '${declaredBy}' plugin,
               but does not specify a dependency on that plugin. Plugins must explicitly declare dependencies on plugins
               that define module types they reference. Please report an issue with the author.
               `,
               {
                 moduleType,
                 pluginName: plugin.name,
-                declaredBy: declaredBy.name,
+                declaredByName: declaredBy,
                 bases,
               },
             )
+          }
+
+          // Attach base handlers (which are the corresponding declaration handlers, if any)
+          for (const [name, handler] of Object.entries(spec.handlers)) {
+            const baseHandler = declaration.spec.handlers[name]
+
+            if (handler && baseHandler) {
+              // Note: We clone the handler to avoid possible circular references
+              // (plugin authors may re-use handlers for various reasons).
+              handler.base = cloneDeep(baseHandler)
+              handler.base!.actionType = name
+              handler.base!.moduleType = moduleType
+              handler.base!.pluginName = declaration.plugin.name
+            }
           }
         }
       }

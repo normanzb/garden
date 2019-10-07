@@ -9,17 +9,15 @@
 import { dedent } from "../../../util/string"
 import { Module } from "../../module"
 import { PluginContext, pluginContextSchema } from "../../../plugin-context"
-import { LogEntry } from "../../../logger/log-entry"
-import { logEntrySchema } from "../base"
+import { logEntrySchema, PluginActionContextParams } from "../base"
 import { baseModuleSpecSchema, ModuleConfig, moduleConfigSchema } from "../../../config/module"
 import { joi } from "../../../config/common"
+import { LogEntry } from "../../../logger/log-entry"
 
-// Note: This is the only module handler that doesn't inherit from a base
-export interface ConfigureModuleParams<T extends Module = Module> {
+export interface ConfigureModuleParams<T extends Module = Module> extends PluginActionContextParams {
   ctx: PluginContext
   log: LogEntry
   moduleConfig: T["_ConfigType"]
-  super?: ConfigureModuleParams<T>
 }
 
 export interface ConfigureModuleResult<T extends Module = Module> {

@@ -7,6 +7,7 @@ import {
   createGardenPlugin,
   ActionHandler,
   GardenPlugin,
+  ModuleActionHandler,
 } from "../../../src/types/plugin/plugin"
 import { Service, ServiceState } from "../../../src/types/service"
 import { RuntimeContext, prepareRuntimeContext } from "../../../src/runtime-context"
@@ -62,6 +63,24 @@ describe("ActionRouter", () => {
 
   // Note: The test plugins below implicitly validate input params for each of the tests
   describe("environment actions", () => {
+    describe("configureProvider", () => {
+      it("should configure the provider", async () => {
+        const config = { foo: "bar" }
+        const result = await actions.configureProvider({
+          pluginName: "test-plugin",
+          log,
+          config,
+          configStore: garden.configStore,
+          projectName: garden.projectName,
+          projectRoot: garden.projectRoot,
+          dependencies: [],
+        })
+        expect(result).to.eql({
+          config,
+        })
+      })
+    })
+
     describe("getEnvironmentStatus", () => {
       it("should return the environment status for a provider", async () => {
         const result = await actions.getEnvironmentStatus({ log, pluginName: "test-plugin" })
@@ -750,20 +769,24 @@ describe("ActionRouter", () => {
   })
 
   describe("callActionHandler", () => {
-    it("should call the handler with a super argument if the handler is overriding another", async () => {
+    it("should call the handler with a base argument if the handler is overriding another", async () => {
       const emptyActions = new ActionRouter(garden, [], [])
 
-      const _super = async () => {
-        return { ready: true, outputs: {} }
-      }
+      const base = Object.assign(
+        async () => ({
+          ready: true,
+          outputs: {},
+        }),
+        { actionType: "getEnvironmentStatus", pluginName: "base" },
+      )
 
       const handler: ActionHandler<any, any> = async (params) => {
-        expect(params.super).to.equal(_super)
+        expect(params.base).to.equal(base)
 
         return { ready: true, outputs: {} }
       }
 
-      handler.super = _super
+      handler.base = base
 
       await emptyActions["callActionHandler"]({
         actionType: "getEnvironmentStatus",  // Doesn't matter which one it is
@@ -774,25 +797,99 @@ describe("ActionRouter", () => {
         defaultHandler: handler,
       })
     })
+
+    it("should recursively override the base parameter when calling a base handler", async () => {
+      const baseA: GardenPlugin = {
+        name: "base-a",
+        handlers: {
+          getSecret: async (params) => {
+            expect(params.base).to.not.exist
+            return { value: params.key }
+          },
+        },
+      }
+      const baseB: GardenPlugin = {
+        name: "base-b",
+        base: "base-a",
+        handlers: {
+          getSecret: async (params) => {
+            expect(params.base).to.exist
+            expect(params.base!.base).to.not.exist
+            return params.base!(params)
+          },
+        },
+      }
+      const foo: GardenPlugin = {
+        name: "foo",
+        base: "base-b",
+        handlers: {
+          getSecret: async (params) => {
+            expect(params.base).to.exist
+            expect(params.base!.base).to.exist
+            return params.base!(params)
+          },
+        },
+      }
+
+      const path = process.cwd()
+
+      const projectConfig: ProjectConfig = {
+        apiVersion: DEFAULT_API_VERSION,
+        kind: "Project",
+        name: "test",
+        path,
+        defaultEnvironment: "default",
+        dotIgnoreFiles: [],
+        environments: [
+          { name: "default", variables: {} },
+        ],
+        providers: [
+          { name: "foo" },
+        ],
+        variables: {},
+      }
+
+      const _garden = await Garden.factory(path, {
+        plugins: [baseA, baseB, foo],
+        config: projectConfig,
+      })
+
+      const _actions = await _garden.getActionRouter()
+
+      const result = await _actions["callActionHandler"]({
+        actionType: "getSecret",  // Doesn't matter which one it is
+        pluginName: "foo",
+        params: {
+          key: "foo",
+          log,
+        },
+      })
+
+      expect(result).to.eql({ value: "foo" })
+    })
   })
 
   describe("callModuleHandler", () => {
-    it("should call the handler with a super argument if the handler is overriding another", async () => {
+    it("should call the handler with a base argument if the handler is overriding another", async () => {
       const emptyActions = new ActionRouter(garden, [], [])
 
       const graph = await garden.getConfigGraph()
       const moduleA = await graph.getModule("module-a")
 
-      const _super = async () => {
+      const base = Object.assign(
+        async () => ({
+          ready: true,
+          outputs: {},
+        }),
+        { actionType: "getBuildStatus", pluginName: "base", moduleType: "test" },
+      )
+
+      const handler: ModuleActionHandler<any, any> = async (params) => {
+        expect(params.base).to.equal(base)
         return { ready: true, outputs: {} }
       }
 
-      const handler: ActionHandler<any, any> = async (params) => {
-        expect(params.super).to.equal(_super)
-        return { ready: true, outputs: {} }
-      }
-
-      handler.super = _super
+      handler.base = base
 
       await emptyActions["callModuleHandler"]({
         actionType: "getBuildStatus",  // Doesn't matter which one it is
@@ -806,22 +903,27 @@ describe("ActionRouter", () => {
   })
 
   describe("callServiceHandler", () => {
-    it("should call the handler with a super argument if the handler is overriding another", async () => {
+    it("should call the handler with a base argument if the handler is overriding another", async () => {
       const emptyActions = new ActionRouter(garden, [], [])
 
       const graph = await garden.getConfigGraph()
       const serviceA = await graph.getService("service-a")
 
-      const _super = async () => {
+      const base = Object.assign(
+        async () => ({
+          forwardablePorts: [],
+          state: <ServiceState>"ready",
+          detail: {},
+        }),
+        { actionType: "deployService", pluginName: "base", moduleType: "test" },
+      )
+
+      const handler: ModuleActionHandler<any, any> = async (params) => {
+        expect(params.base).to.equal(base)
         return { forwardablePorts: [], state: <ServiceState>"ready", detail: {} }
       }
 
-      const handler: ActionHandler<any, any> = async (params) => {
-        expect(params.super).to.equal(_super)
-        return { forwardablePorts: [], state: <ServiceState>"ready", detail: {} }
-      }
-
-      handler.super = _super
+      handler.base = base
 
       await emptyActions["callServiceHandler"]({
         actionType: "deployService",  // Doesn't matter which one it is
@@ -927,13 +1029,29 @@ describe("ActionRouter", () => {
   })
 
   describe("callTaskHandler", () => {
-    it("should call the handler with a super argument if the handler is overriding another", async () => {
+    it("should call the handler with a base argument if the handler is overriding another", async () => {
       const emptyActions = new ActionRouter(garden, [], [])
 
       const graph = await garden.getConfigGraph()
       const taskA = await graph.getTask("task-a")
 
-      const _super = async () => {
+      const base = Object.assign(
+        async () => ({
+          moduleName: "module-a",
+          taskName: "task-a",
+          command: [],
+          outputs: { moo: "boo" },
+          success: true,
+          version: task.module.version.versionString,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          log: "boo",
+        }),
+        { actionType: "runTask", pluginName: "base", moduleType: "test" },
+      )
+
+      const handler: ModuleActionHandler<any, any> = async (params) => {
+        expect(params.base).to.equal(base)
         return {
           moduleName: "module-a",
           taskName: "task-a",
@@ -947,22 +1065,7 @@ describe("ActionRouter", () => {
         }
       }
 
-      const handler: ActionHandler<any, any> = async (params) => {
-        expect(params.super).to.equal(_super)
-        return {
-          moduleName: "module-a",
-          taskName: "task-a",
-          command: [],
-          outputs: { moo: "boo" },
-          success: true,
-          version: task.module.version.versionString,
-          startedAt: new Date(),
-          completedAt: new Date(),
-          log: "boo",
-        }
-      }
-
-      handler.super = _super
+      handler.base = base
 
       await emptyActions["callTaskHandler"]({
         actionType: "runTask",
