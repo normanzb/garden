@@ -20,13 +20,23 @@ export interface ApplyParams {
   force?: boolean,
   pruneSelector?: string,
   namespace?: string,
+  validate?: boolean,
 }
 
 export const KUBECTL_DEFAULT_TIMEOUT = 300
 
 export async function apply(
-  { log, provider, manifests: objects, dryRun = false, force = false, namespace, pruneSelector }: ApplyParams,
-) {
+  {
+    log,
+    provider,
+    manifests: objects,
+    dryRun = false,
+    force = false,
+    validate = true,
+    namespace,
+    pruneSelector,
+  }: ApplyParams) {
+
   const input = Buffer.from(encodeYamlMulti(objects))
 
   let args = ["apply"]
@@ -34,6 +44,7 @@ export async function apply(
   force && args.push("--force")
   pruneSelector && args.push("--prune", "--selector", pruneSelector)
   args.push("--output=json", "-f", "-")
+  !validate && args.push("--validate=false")
 
   const result = await kubectl.stdout({ log, provider, namespace, args, input })
 

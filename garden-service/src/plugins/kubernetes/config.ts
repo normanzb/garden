@@ -19,10 +19,21 @@ export interface ProviderSecretRef {
   namespace: string
 }
 
+export type TlsManager = "cert-manager"
+export type LEServerType = "staging" | "prod"
+
 export interface IngressTlsCertificate {
   name: string
   hostnames?: string[]
   secretRef: ProviderSecretRef
+  managedBy?: TlsManager
+  serverType?: LEServerType
+}
+
+export interface TlsManagerConfig {
+  name: TlsManager
+  email: string
+  installOnly?: boolean
 }
 
 interface KubernetesResourceSpec {
@@ -75,6 +86,7 @@ export interface KubernetesBaseConfig extends ProviderConfig {
   resources: KubernetesResources
   storage: KubernetesStorage
   tlsCertificates: IngressTlsCertificate[]
+  tlsManager?: TlsManagerConfig
   _systemServices: string[]
 }
 
@@ -224,8 +236,19 @@ const tlsCertificateSchema = joi.object()
       )
       .example([["www.mydomain.com"], {}]),
     secretRef: secretRef
+      .required()
       .description("A reference to the Kubernetes secret that contains the TLS certificate and key for the domain.")
       .example({ name: "my-tls-secret", namespace: "default" }),
+    serverType: joi.string()
+      .allow("staging", "production")
+      .default("staging")
+      .description(deline`If the certificate is managed by cert-manager, this allows to specify which
+        LetsEncrypt endpoint to use to validate the certificate challenge. Defaults to "staging"`)
+      .example("staging"),
+    managedBy: joi.string()
+      .description("A reference to the Tls certificates manager used to generate the certificate.")
+      .allow("cert-manager")
+      .example("cert-manager"),
   })
 
 export const kubernetesConfigBase = providerConfigBaseSchema
@@ -358,6 +381,19 @@ export const kubernetesConfigBase = providerConfigBaseSchema
     tlsCertificates: joiArray(tlsCertificateSchema)
       .unique("name")
       .description("One or more certificates to use for ingress."),
+    tlsManager: joi.object()
+    .optional()
+      .keys({
+        name: joi.string().optional(),
+        email: joi.string().optional(),
+        serverType: joi.string().optional(),
+        installOnly: joi.boolean().optional(),
+      })
+      .description(dedent`
+        A multiline description of the tlsManager option <------ FILL ME UP BEFORE MERGING
+        <------ FILL ME UP BEFORE MERGING
+        <------ FILL ME UP BEFORE MERGING
+      `),
     _systemServices: joiArray(joiIdentifier())
       .meta({ internal: true }),
   })

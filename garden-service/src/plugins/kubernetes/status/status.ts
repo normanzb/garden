@@ -224,6 +224,57 @@ export async function waitForResources({ ctx, provider, serviceName, resources, 
   return statuses.map(s => s.resource)
 }
 
+interface PredicateParams {
+  ctx: PluginContext
+  provider: KubernetesProvider
+  log: LogEntry
+  resources?: any[]
+}
+interface WaitForResourcesParams {
+  ctx: PluginContext,
+  provider: KubernetesProvider,
+  log: LogEntry,
+  resourcesType: string
+  resources: any[]
+  predicate: (PredicateParams) => Promise<boolean>
+}
+
+export async function waitForResourcesToBeReady({
+  ctx,
+  provider,
+  log,
+  resourcesType,
+  resources,
+  predicate,
+}: WaitForResourcesParams) {
+  let loops = 0
+  const startTime = new Date().getTime()
+
+  const statusLine = log.info({
+    symbol: "info",
+    section: resourcesType,
+    msg: `Waiting for resources to be ready...`,
+  })
+
+  while (true) {
+    await sleep(2000 + 500 * loops)
+    loops += 1
+
+    if (await predicate({ ctx, provider, log, resources })) {
+      break
+    }
+
+    const now = new Date().getTime()
+
+    if (now - startTime > KUBECTL_DEFAULT_TIMEOUT * 1000) {
+      throw new Error(`Timed out waiting for ${resourcesType} to be created`)
+    }
+  }
+
+  statusLine.setState({ symbol: "info", section: resourcesType, msg: `Resources ready` })
+
+}
+
 interface ComparisonResult {
   state: ServiceState
   remoteResources: KubernetesResource[]

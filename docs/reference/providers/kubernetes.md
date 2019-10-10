@@ -720,7 +720,7 @@ A reference to the Kubernetes secret that contains the TLS certificate and key f
 
 | Type     | Required |
 | -------- | -------- |
-| `object` | No       |
+| `object` | Yes      |
 
 Example:
 
@@ -763,6 +763,86 @@ The namespace where the secret is stored. If necessary, the secret may be copied
 | Type     | Required | Default     |
 | -------- | -------- | ----------- |
 | `string` | No       | `"default"` |
+
+### `providers[].tlsCertificates[].serverType`
+
+[providers](#providers) > [tlsCertificates](#providerstlscertificates) > serverType
+
+If the certificate is managed by cert-manager, this allows to specify which LetsEncrypt endpoint to use to validate the certificate challenge. Defaults to "staging"
+
+| Type     | Required | Default     |
+| -------- | -------- | ----------- |
+| `string` | No       | `"staging"` |
+
+Example:
+
+```yaml
+providers:
+  - tlsCertificates:
+      - serverType: "staging"
+```
+
+### `providers[].tlsCertificates[].managedBy`
+
+[providers](#providers) > [tlsCertificates](#providerstlscertificates) > managedBy
+
+A reference to the Tls certificates manager used to generate the certificate.
+
+| Type     | Required |
+| -------- | -------- |
+| `string` | No       |
+
+Example:
+
+```yaml
+providers:
+  - tlsCertificates:
+      - managedBy: "cert-manager"
+```
+
+### `providers[].tlsManager`
+
+[providers](#providers) > tlsManager
+
+A multiline description of the tlsManager option <------ FILL ME UP BEFORE MERGING
+<------ FILL ME UP BEFORE MERGING
+<------ FILL ME UP BEFORE MERGING
+
+| Type     | Required |
+| -------- | -------- |
+| `object` | No       |
+
+### `providers[].tlsManager.name`
+
+[providers](#providers) > [tlsManager](#providerstlsmanager) > name
+
+| Type     | Required |
+| -------- | -------- |
+| `string` | No       |
+
+### `providers[].tlsManager.email`
+
+[providers](#providers) > [tlsManager](#providerstlsmanager) > email
+
+| Type     | Required |
+| -------- | -------- |
+| `string` | No       |
+
+### `providers[].tlsManager.serverType`
+
+[providers](#providers) > [tlsManager](#providerstlsmanager) > serverType
+
+| Type     | Required |
+| -------- | -------- |
+| `string` | No       |
+
+### `providers[].tlsManager.installOnly`
+
+[providers](#providers) > [tlsManager](#providerstlsmanager) > installOnly
+
+| Type      | Required |
+| --------- | -------- |
+| `boolean` | No       |
 
 ### `providers[].name`
 
@@ -973,6 +1053,13 @@ providers:
         secretRef:
           name:
           namespace: default
+        serverType: staging
+        managedBy:
+    tlsManager:
+      name:
+      email:
+      serverType:
+      installOnly:
     name: kubernetes
     context:
     deploymentRegistry:

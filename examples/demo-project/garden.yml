@@ -5,6 +5,7 @@ environments:
   - name: local
     providers:
       - name: local-kubernetes
+        tlsManager: cert-manager
   - name: remote
     providers:
       - name: kubernetes

@@ -21,7 +21,7 @@ export function checkPodStatus(
 ): ResourceStatus {
   for (const pod of pods) {
     // TODO: detect unhealthy state (currently we just time out)
-    const ready = some(pod.status!.conditions!.map(c => c.type === "ready"))
+    const ready = some(pod.status!.conditions!.map(c => c.type === "Ready" && c.status === "True"))
     if (!ready) {
       return { state: "deploying", resource }
     }
