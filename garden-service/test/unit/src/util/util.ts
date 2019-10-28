@@ -1,15 +1,88 @@
 import { expect } from "chai"
+import { describe } from "mocha"
 import {
   pickKeys,
   getEnvVarName,
   deepOmitUndefined,
   deepFilter,
   splitLast,
+  exec,
+  createOutputStream,
+  makeErrorMsg,
+  renderOutputStream,
+  spawn,
 } from "../../../../src/util/util"
 import { expectError } from "../../../helpers"
 import { splitFirst } from "../../../../src/util/util"
+import { getLogger } from "../../../../src/logger/logger"
 
 describe("util", () => {
+  describe("exec", () => {
+    before(function() {
+      // These tests depend the underlying OS and are only executed on macOS
+      if (process.platform !== "darwin") {
+        // tslint:disable-next-line: no-invalid-this
+        this.skip()
+      }
+    })
+    it("should successfully execute a command", async () => {
+      const res = await exec("echo", ["hello"])
+      expect(res.stdout).to.equal("hello")
+    })
+    it("should handle command and args in a single string", async () => {
+      const res = await exec("echo hello && echo world", [], { shell: true })
+      expect(res.stdout).to.equal("hello\nworld")
+    })
+    it("should optionally pipe stdout and stderr to an output stream", async () => {
+      const logger = getLogger()
+      const entry = logger.placeholder()
+      const errorEntry = logger.placeholder()
+
+      await exec("echo hello", [], { outputStream: createOutputStream(entry) })
+      await exec("ls scottiepippen", [], { outputStream: createOutputStream(errorEntry), reject: false })
+      expect(entry.getMessageState().msg).to.equal(renderOutputStream("hello"))
+      expect(errorEntry.getMessageState().msg).to.equal(
+        renderOutputStream("ls: scottiepippen: No such file or directory"),
+      )
+    })
+    it("should throw a standardised error message on error", async () => {
+      try {
+        await exec("ls scottiepippen")
+      } catch (err) {
+        expect(err.message).to.equal(makeErrorMsg({
+          code: 1,
+          cmd: "ls scottiepippen",
+          args: [],
+          output: "ls: scottiepippen: No such file or directory",
+          error: "ls: scottiepippen: No such file or directory",
+        }))
+      }
+    })
+  })
+
+  describe("spawn", () => {
+    before(function() {
+      // These tests depend on the underlying OS and are only executed on macOS
+      if (process.platform !== "darwin") {
+        // tslint:disable-next-line: no-invalid-this
+        this.skip()
+      }
+    })
+    it("should throw a standardised error message on error", async () => {
+      try {
+        await spawn("ls", ["scottiepippen"])
+      } catch (err) {
+        expect(err.message).to.equal(makeErrorMsg({
+          code: 1,
+          cmd: "ls scottiepippen",
+          args: [],
+          output: "ls: scottiepippen: No such file or directory",
+          error: "ls: scottiepippen: No such file or directory",
+        }))
+      }
+    })
+  })
+
   describe("getEnvVarName", () => {
     it("should translate the service name to a name appropriate for env variables", async () => {
       expect(getEnvVarName("service-b")).to.equal("SERVICE_B")
