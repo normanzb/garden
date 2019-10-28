@@ -103,18 +103,21 @@ export function makeErrorMsg(
   { code, cmd, args, output, error }: { code: number, cmd: string, args: string[], error: string, output: string },
 ) {
   const nLinesToShow = 100
-  const out = output.split("\n").slice(-nLinesToShow).join("\n")
+  const lines = output.split("\n")
+  const out = lines.slice(-nLinesToShow).join("\n")
   const cmdStr = args.length > 0 ? `${cmd} ${args.join(" ")}` : cmd
-  const msg = dedent`
-    Command ${chalk.bold(cmdStr)} failed with code ${code}:
+  let msg = dedent`
+    Command "${cmdStr}" failed with code ${code}:
 
-    ${chalk.bold(trimEnd(error, "\n"))}
-
-    Here are the last ${nLinesToShow} lines of the output:
-
-    ${trimEnd(out, "\n")}
+    ${trimEnd(error, "\n")}
   `
-  return chalk.red(msg)
+  if (out !== error) {
+    msg += lines.length > nLinesToShow
+      ? `\n\nHere are the last ${nLinesToShow} lines of the output:`
+      : `\n\nHere's the full output:`
+    msg += `\n\n${trimEnd(out, "\n")}`
+  }
+  return msg
 }
 
 interface ExecOpts extends execa.Options {

@@ -15,8 +15,79 @@ import {
 import { expectError } from "../../../helpers"
 import { splitFirst } from "../../../../src/util/util"
 import { getLogger } from "../../../../src/logger/logger"
+import { dedent } from "../../../../src/util/string"
 
 describe("util", () => {
+  describe("makeErrorMsg", () => {
+    it("should return an error message", () => {
+      const msg = makeErrorMsg({
+        code: 1,
+        cmd: "ls",
+        args: ["some-dir"],
+        error: "dir not found",
+        output: "dir not found",
+      })
+      expect(msg).to.equal(dedent`
+        Command "ls some-dir" failed with code 1:
+
+        dir not found
+      `)
+    })
+    it("should ignore emtpy args", () => {
+      const msg = makeErrorMsg({
+        code: 1,
+        cmd: "ls",
+        args: [],
+        error: "dir not found",
+        output: "dir not found",
+      })
+      expect(msg).to.equal(dedent`
+        Command "ls" failed with code 1:
+
+        dir not found
+      `)
+    })
+    it("should include output if it's not the same as the error", () => {
+      const msg = makeErrorMsg({
+        code: 1,
+        cmd: "ls some-dir",
+        args: [],
+        error: "dir not found",
+        output: "dir not found and some more output",
+      })
+      expect(msg).to.equal(dedent`
+        Command "ls some-dir" failed with code 1:
+
+        dir not found
+
+        Here's the full output:
+
+        dir not found and some more output
+      `)
+    })
+    it("should include the last 100 lines of output if output is very long", () => {
+      const output = "All work and no play\n"
+      const outputFull = output.repeat(102)
+      const outputPartial = output.repeat(99) // This makes 100 lines in total
+
+      const msg = makeErrorMsg({
+        code: 1,
+        cmd: "ls some-dir",
+        args: [],
+        error: "dir not found",
+        output: outputFull,
+      })
+      expect(msg).to.equal(dedent`
+        Command "ls some-dir" failed with code 1:
+
+        dir not found
+
+        Here are the last 100 lines of the output:
+
+        ${outputPartial}
+      `)
+    })
+  })
   describe("exec", () => {
     before(function() {
       // These tests depend the underlying OS and are only executed on macOS
