@@ -804,9 +804,7 @@ providers:
 
 [providers](#providers) > tlsManager
 
-A multiline description of the tlsManager option <------ FILL ME UP BEFORE MERGING
-<------ FILL ME UP BEFORE MERGING
-<------ FILL ME UP BEFORE MERGING
+TLS certificates manager configuration, currently supporting cert-manager.
 
 | Type     | Required |
 | -------- | -------- |
@@ -816,29 +814,45 @@ A multiline description of the tlsManager option <------ FILL ME UP BEFORE MERGI
 
 [providers](#providers) > [tlsManager](#providerstlsmanager) > name
 
+The name of the certificate manager of choice. Currently supporting only cert-manager.
+
 | Type     | Required |
 | -------- | -------- |
-| `string` | No       |
+| `string` | Yes      |
+
+Example:
+
+```yaml
+providers:
+  - tlsManager:
+      ...
+      name: "cert-manager"
+```
 
 ### `providers[].tlsManager.email`
 
 [providers](#providers) > [tlsManager](#providerstlsmanager) > email
 
-| Type     | Required |
-| -------- | -------- |
-| `string` | No       |
-
-### `providers[].tlsManager.serverType`
-
-[providers](#providers) > [tlsManager](#providerstlsmanager) > serverType
+The email which will be used for the certificate creation. Let's Encrypt use this email to warn about expiring certificates.
 
 | Type     | Required |
 | -------- | -------- |
-| `string` | No       |
+| `string` | Yes      |
+
+Example:
+
+```yaml
+providers:
+  - tlsManager:
+      ...
+      email: "yourname@example.com"
+```
 
 ### `providers[].tlsManager.installOnly`
 
 [providers](#providers) > [tlsManager](#providerstlsmanager) > installOnly
+
+When set to "true" the certificate manager is installed but no certificates are generated.
 
 | Type      | Required |
 | --------- | -------- |
@@ -1058,7 +1072,6 @@ providers:
     tlsManager:
       name:
       email:
-      serverType:
       installOnly:
     name: kubernetes
     context:

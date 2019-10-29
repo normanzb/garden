@@ -32,7 +32,7 @@ export interface GetIssuerParams {
   serverType: LEServerType
 }
 
-export function getIssuerFromTls({name, tlsManager, tlsCertificate, serverType }: GetIssuerParams) {
+export function getIssuerFromTls({ name, tlsManager, tlsCertificate, serverType }: GetIssuerParams) {
 
   let server = "https://acme-staging-v02.api.letsencrypt.org/directory"
   if (serverType === "prod") {
@@ -97,19 +97,19 @@ export function getCertificateFromTls({
   }
 }
 
-export function getCertificateName({tlsCertificate, tlsManager }) {
+export function getCertificateName({ tlsCertificate, tlsManager }) {
   const serverType = tlsManager.serverType || "staging"
   return `${tlsCertificate.name}-certificate-${serverType}`
 }
 
-export async function checkCertificateStatusByName({ctx, log, provider, resources = [], namespace }: PredicateParams) {
+export async function checkCertificateStatusByName({ ctx, log, provider, resources = [], namespace }: PredicateParams) {
   const ns = namespace || await getAppNamespace(ctx, log, provider)
   const existingCertificates = await getAllCertificates(log, provider, ns)
   return resources.every(
     el => find(existingCertificates.items, (o) => o.metadata.name === el && isCertificateReady(o)))
 }
 
-export async function checkForCertManagerPodsReady({log, provider }: PredicateParams) {
+export async function checkForCertManagerPodsReady({ log, provider }: PredicateParams) {
   return await checkCertManagerStatus({ provider, log }) === "ready"
 }
 
@@ -178,12 +178,12 @@ export async function getAllCertificates(log: LogEntry, provider: KubernetesProv
   const args = [
     "get", "certificates", "--namespace", namespace,
   ]
-  return kubectl.json({ log, provider, args})
+  return kubectl.json({ log, provider, args })
 }
 
 // This is the suggested way to check if cert-maanger got deployed succesfully
 // https://docs.cert-manager.io/en/latest/getting-started/install/kubernetes.html
-export async function checkCertManagerStatus({ provider, log, namespace = "cert-manager"}): Promise<ServiceState> {
+export async function checkCertManagerStatus({ provider, log, namespace = "cert-manager" }): Promise<ServiceState> {
   const api = await KubeApi.factory(log, provider)
   const systemPods = await api.core.listNamespacedPod(namespace)
   const certManagerPods: KubernetesServerResource<V1Pod>[] = []

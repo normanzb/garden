@@ -105,8 +105,8 @@ export async function getEnvironmentStatus({ ctx, log }: GetEnvironmentStatusPar
       detail.systemManagedCertificatesReady = false
     } else {
       const certificateNames = provider.config.tlsCertificates
-      .filter(cert => cert.managedBy === "cert-manager")
-      .map(cert => getCertificateName({ tlsCertificate: cert, tlsManager }))
+        .filter(cert => cert.managedBy === "cert-manager")
+        .map(cert => getCertificateName({ tlsCertificate: cert, tlsManager }))
       const certificatesStatus = await checkCertificateStatusByName({ ctx, log, provider, resources: certificateNames })
       if (!certificatesStatus) {
         result.ready = false

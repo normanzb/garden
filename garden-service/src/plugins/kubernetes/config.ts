@@ -382,18 +382,23 @@ export const kubernetesConfigBase = providerConfigBaseSchema
       .unique("name")
       .description("One or more certificates to use for ingress."),
     tlsManager: joi.object()
-    .optional()
+      .optional()
       .keys({
-        name: joi.string().optional(),
-        email: joi.string().optional(),
-        serverType: joi.string().optional(),
-        installOnly: joi.boolean().optional(),
+        name: joi.string()
+          .required()
+          .allow("cert-manager")
+          .description("The name of the certificate manager of choice. Currently supporting only cert-manager.")
+          .example("cert-manager"),
+        email: joi.string()
+          .required()
+          .description(deline`The email which will be used for the certificate creation.
+             Let's Encrypt use this email to warn about expiring certificates.`)
+          .example("yourname@example.com"),
+        installOnly: joi.boolean()
+          .optional()
+          .description("When set to \"true\" the certificate manager is installed but no certificates are generated."),
       })
-      .description(dedent`
-        A multiline description of the tlsManager option <------ FILL ME UP BEFORE MERGING
-        <------ FILL ME UP BEFORE MERGING
-        <------ FILL ME UP BEFORE MERGING
-      `),
+      .description("TLS certificates manager configuration, currently supporting cert-manager."),
     _systemServices: joiArray(joiIdentifier())
       .meta({ internal: true }),
   })
