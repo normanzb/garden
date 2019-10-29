@@ -32,7 +32,14 @@ export interface GetIssuerParams {
   serverType: LEServerType
 }
 
-export function getIssuerFromTls({ name, tlsManager, tlsCertificate, serverType }: GetIssuerParams) {
+/**
+ * Helper function for generating a cert-manager ClusterIssuer
+ *
+ * @export
+ * @param {GetIssuerParams} { name, tlsManager, tlsCertificate, serverType }
+ * @returns
+ */
+export function getClusterIssuerFromTls({ name, tlsManager, tlsCertificate, serverType }: GetIssuerParams) {
 
   let server = "https://acme-staging-v02.api.letsencrypt.org/directory"
   if (serverType === "prod") {
@@ -72,6 +79,17 @@ export interface GetCertificateParams {
   tlsCertificate: IngressTlsCertificate
   issuerName: string
 }
+/**
+ * Helper function for generating a cert-manager Certificate
+ *
+ * @export
+ * @param {GetCertificateParams} {
+ *   tlsManager,
+ *   tlsCertificate,
+ *   issuerName,
+ * }
+ * @returns
+ */
 export function getCertificateFromTls({
   tlsManager,
   tlsCertificate,
@@ -97,11 +115,25 @@ export function getCertificateFromTls({
   }
 }
 
+/**
+ * Helper function for generating a cert-manager Certificate name.
+ *
+ * @export
+ * @param {*} { tlsCertificate, tlsManager }
+ * @returns
+ */
 export function getCertificateName({ tlsCertificate, tlsManager }) {
   const serverType = tlsManager.serverType || "staging"
   return `${tlsCertificate.name}-certificate-${serverType}`
 }
 
+/**
+ * Given an array of certificate names, check if they are all existing and Ready.
+ *
+ * @export
+ * @param {PredicateParams} { ctx, log, provider, resources = [], namespace }
+ * @returns
+ */
 export async function checkCertificateStatusByName({ ctx, log, provider, resources = [], namespace }: PredicateParams) {
   const ns = namespace || await getAppNamespace(ctx, log, provider)
   const existingCertificates = await getAllCertificates(log, provider, ns)
@@ -109,6 +141,13 @@ export async function checkCertificateStatusByName({ ctx, log, provider, resourc
     el => find(existingCertificates.items, (o) => o.metadata.name === el && isCertificateReady(o)))
 }
 
+/**
+ * Check if the cert-manager pods are ready.
+ *
+ * @export
+ * @param {PredicateParams} { log, provider }
+ * @returns true if the cert-manager is installed and running
+ */
 export async function checkForCertManagerPodsReady({ log, provider }: PredicateParams) {
   return await checkCertManagerStatus({ provider, log }) === "ready"
 }
@@ -129,6 +168,20 @@ interface WaitForResourcesParams {
   predicate: (PredicateParams) => Promise<boolean>
 }
 
+/**
+ * Wait for some resources to be Ready using a predicate.
+ * The predicate function needs to return a Promise<boolean> and
+ * to implement the logic for checking for Readiness for the given resources.
+ *
+ * @export
+ * @param {WaitForResourcesParams} {
+ *   ctx,
+ *   provider,
+ *   log,
+ *   resourcesType,
+ *   resources,
+ *   predicate }
+ */
 export async function waitForResourcesWith({
   ctx,
   provider,
@@ -166,6 +219,13 @@ export async function waitForResourcesWith({
 
 }
 
+/**
+ * Check if a given cert-manager Certificate is Ready.
+ *
+ * @export
+ * @param {*} cert A cert-manager Certificate resource
+ * @returns
+ */
 export function isCertificateReady(cert) {
   const { conditions } = cert.status
   return conditions
@@ -174,6 +234,17 @@ export function isCertificateReady(cert) {
     && conditions[0].type === "Ready"
 }
 
+/**
+ * Retrieves all Certificates from the specified namespace.
+ * Certificates are cert-manager Custom Resources: this will fail if
+ * they are not present in the cluster.
+ *
+ * @export
+ * @param {LogEntry} log
+ * @param {KubernetesProvider} provider
+ * @param {string} namespace
+ * @returns
+ */
 export async function getAllCertificates(log: LogEntry, provider: KubernetesProvider, namespace: string) {
   const args = [
     "get", "certificates", "--namespace", namespace,
@@ -181,8 +252,18 @@ export async function getAllCertificates(log: LogEntry, provider: KubernetesProv
   return kubectl.json({ log, provider, args })
 }
 
-// This is the suggested way to check if cert-maanger got deployed succesfully
-// https://docs.cert-manager.io/en/latest/getting-started/install/kubernetes.html
+/**
+ * Check the status of the cert-manager installation.
+ * Specifically will check if the following 3 pods are deployed and running:
+ * cert-manager-xxx, cert-manager-cainjector-xxx and cert-manager-webhook-xxx
+ *
+ * This is the suggested way to check if cert-maanger got deployed succesfully
+ * https://docs.cert-manager.io/en/latest/getting-started/install/kubernetes.html
+ *
+ * @export
+ * @param {*} { provider, log, namespace = "cert-manager" }
+ * @returns {Promise<ServiceState>}
+ */
 export async function checkCertManagerStatus({ provider, log, namespace = "cert-manager" }): Promise<ServiceState> {
   const api = await KubeApi.factory(log, provider)
   const systemPods = await api.core.listNamespacedPod(namespace)
@@ -195,8 +276,6 @@ export async function checkCertManagerStatus({ provider, log, namespace = "cert-
       certManagerPods.push(pod)
     })
 
-  // Expect to find 3 pods running:
-  // cert-manager, cert-manager-cainjector and cert-manager-webhook
   if (certManagerPods.length !== 3) {
     return "missing"
   }
@@ -213,6 +292,15 @@ export interface SetupCertManagerParams {
   status: EnvironmentStatus<PrimitiveMap>
 }
 
+/**
+ * Main entry point to setup cert-manager.
+ * Ensure namespaces, install CustomResources, generate Issuers and Certificates,
+ * waits for the various resources to be up and running. What to install and generate
+ * is conditioned by the status: EnvironmentStatus parameter properties.
+ *
+ * @export
+ * @param {SetupCertManagerParams} { ctx, provider, log, status }
+ */
 export async function setupCertManager({ ctx, provider, log, status }: SetupCertManagerParams) {
 
   const entry = log.info({
@@ -256,7 +344,7 @@ export async function setupCertManager({ ctx, provider, log, status }: SetupCert
           const serverType = cert.serverType || "staging"
           const issuerName = `${cert.name}-${serverType}`
 
-          const issuerManifest = getIssuerFromTls({
+          const issuerManifest = getClusterIssuerFromTls({
             name: issuerName,
             namespace,
             tlsManager,
