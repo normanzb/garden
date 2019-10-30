@@ -232,22 +232,22 @@ export class KubeApi {
   async getApiResourceInfo(log: LogEntry, manifest: KubernetesResource): Promise<ApiResourceInfo> {
     const apiInfo = await this.getApiInfo()
     const group = await this.getApiGroup(manifest)
-    const groupId = group.preferredVersion!.groupVersion
+    const apiVersion = manifest.apiVersion
 
-    const lockKey = `${this.context}/${groupId}`
-    const resourceMap = apiInfo.resources[groupId] || await apiInfoLock.acquire(lockKey, async () => {
-      if (apiInfo.resources[groupId]) {
-        return apiInfo.resources[groupId]
+    const lockKey = `${this.context}/${apiVersion}`
+    const resourceMap = apiInfo.resources[apiVersion] || await apiInfoLock.acquire(lockKey, async () => {
+      if (apiInfo.resources[apiVersion]) {
+        return apiInfo.resources[apiVersion]
       }
 
-      log.debug(`Kubernetes: Getting API resource info for group ${groupId}`)
-      const res = await this.request(log, getGroupBasePath(groupId))
+      log.debug(`Kubernetes: Getting API resource info for group ${apiVersion}`)
+      const res = await this.request(log, getGroupBasePath(apiVersion))
 
       // We're only interested in the entities themselves, not the sub-resources
-      const resources = res.body.resources.filter(r => !r.name.includes("/"))
+      const resources = res.body.resources.filter((r: any) => !r.name.includes("/"))
 
-      apiInfo.resources[groupId] = keyBy(resources, "kind")
-      return apiInfo.resources[groupId]
+      apiInfo.resources[apiVersion] = keyBy(resources, "kind")
+      return apiInfo.resources[apiVersion]
     })
 
     const resource = resourceMap[manifest.kind]
@@ -289,9 +289,9 @@ export class KubeApi {
     const name = manifest.metadata.name
     log.silly(`Fetching Kubernetes resource ${manifest.apiVersion}/${manifest.kind}/${name}`)
 
-    const { group, resource } = await this.getApiResourceInfo(log, manifest)
-    const groupId = group.preferredVersion!.groupVersion
-    const basePath = getGroupBasePath(groupId)
+    const { resource } = await this.getApiResourceInfo(log, manifest)
+    const apiVersion = manifest.apiVersion
+    const basePath = getGroupBasePath(apiVersion)
 
     const apiPath = resource.namespaced
       ? `${basePath}/namespaces/${namespace}/${resource.name}/${name}`
@@ -340,7 +340,7 @@ export class KubeApi {
           return Reflect.get(target, name, receiver)
         }
 
-        return function(...args) {
+        return (...args: any[]) => {
           const defaultHeaders = target["defaultHeaders"]
 
           if (name.startsWith("patch")) {
@@ -372,9 +372,9 @@ export class KubeApi {
   }
 }
 
-function getGroupBasePath(groupId: string) {
+function getGroupBasePath(apiVersion: string) {
   // Of course, Kubernetes helpfully uses a singular for the core API and not everything else. So there you go.
-  return groupId.includes("/") ? `/apis/${groupId}` : `/api/${groupId}`
+  return apiVersion.includes("/") ? `/apis/${apiVersion}` : `/api/${apiVersion}`
 }
 
 export async function getKubeConfig(log: LogEntry, provider: KubernetesProvider) {
